@@ -1,0 +1,87 @@
+const { google } = require('googleapis');
+
+async function testCorrectLostModeFields() {
+  try {
+    console.log('🔍 Testing correct Lost Mode field names...');
+    
+    // Initialize auth
+    const auth = new google.auth.GoogleAuth({
+      keyFile: './mdm_server_key.json',
+      scopes: ['https://www.googleapis.com/auth/androidmanagement'],
+    });
+
+    const client = await auth.getClient();
+    const service = google.androidmanagement({
+      version: 'v1',
+      auth: client,
+    });
+
+    console.log('✅ Authentication successful');
+
+    const deviceName = 'enterprises/LC048psd8h/devices/36b94e49cf4e18b9';
+    
+    // Test the correct field names based on Android Management API documentation
+    const correctFields = [
+      {
+        name: 'Standard Android Management API fields',
+        command: {
+          type: 'START_LOST_MODE',
+          startLostModeParams: {
+            lostMessage: 'This device has been reported as lost. Please contact the owner immediately.',
+            phoneNumber: '930230233',
+            emailAddress: 'abdemirza@gmail.com'
+          }
+        }
+      },
+      {
+        name: 'Alternative field names',
+        command: {
+          type: 'START_LOST_MODE',
+          startLostModeParams: {
+            message: 'This device has been reported as lost. Please contact the owner immediately.',
+            contactPhone: '930230233',
+            contactEmail: 'abdemirza@gmail.com'
+          }
+        }
+      },
+      {
+        name: 'Minimal fields',
+        command: {
+          type: 'START_LOST_MODE',
+          startLostModeParams: {
+            lostMessage: 'This device has been reported as lost.'
+          }
+        }
+      }
+    ];
+
+    for (const test of correctFields) {
+      try {
+        console.log(`\n🔍 Testing ${test.name}:`);
+        console.log('Command:', JSON.stringify(test.command, null, 2));
+        
+        const response = await service.enterprises.devices.issueCommand({
+          name: deviceName,
+          requestBody: test.command,
+        });
+        
+        console.log(`✅ ${test.name} worked!`);
+        console.log('Response:', JSON.stringify(response.data, null, 2));
+        break; // Stop after first successful command
+        
+      } catch (error) {
+        console.log(`❌ ${test.name} failed:`, error.message);
+      }
+    }
+
+  } catch (error) {
+    console.error('❌ General Error:', error.message);
+  }
+}
+
+testCorrectLostModeFields();
+
+
+
+
+
