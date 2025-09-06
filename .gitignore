@@ -188,7 +188,6 @@ dist
 .vscode-test
 
 # Google Cloud credentials
-service-account-key.json
 *.json
 
 # IDE files
