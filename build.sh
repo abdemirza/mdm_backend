@@ -15,4 +15,7 @@ else
     echo "Warning: GOOGLE_SERVICE_ACCOUNT_KEY environment variable not set"
 fi
 
+# Set GOOGLE_APPLICATION_CREDENTIALS environment variable
+export GOOGLE_APPLICATION_CREDENTIALS="./mdm_server_key.json"
+
 echo "Build completed successfully!"

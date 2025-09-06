@@ -194,6 +194,10 @@ mdm_server_key.json
 !package-lock.json
 !tsconfig.json
 
+# APK files (but allow the DPC app)
+*.apk
+!public/downloads/mdm-dpc-app.apk
+
 # IDE files
 .vscode/
 .idea/
