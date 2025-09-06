@@ -11,6 +11,17 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
+# Direct APK download redirects
+[[redirects]]
+  from = "/download/mdm-dpc-app.apk"
+  to = "/public/downloads/mdm-dpc-app.apk"
+  status = 200
+
+[[redirects]]
+  from = "/download/app.apk"
+  to = "/public/downloads/mdm-dpc-app.apk"
+  status = 200
+
 [[redirects]]
   from = "/*"
   to = "/index.html"

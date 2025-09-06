@@ -24,8 +24,8 @@ export const handler = async (event, context) => {
 
     // Only allow specific files for security
     const allowedFiles = {
-      'mdm-dpc-app.apk': 'public/downloads/mdm-dpc-app.apk',
-      'app.apk': 'public/downloads/mdm-dpc-app.apk', // Alias
+      'mdm-dpc-app.apk': './assets/mdm-dpc-app.apk',
+      'app.apk': './assets/mdm-dpc-app.apk', // Alias
     };
 
     if (!allowedFiles[fileName]) {
@@ -44,20 +44,56 @@ export const handler = async (event, context) => {
       const fs = await import('fs');
       const path = await import('path');
       
-      const filePath = allowedFiles[fileName];
+      // Try multiple possible paths for the APK file
+      const possiblePaths = [
+        allowedFiles[fileName],
+        `./assets/${fileName}`,
+        `../assets/${fileName}`,
+        `./public/downloads/${fileName}`,
+        `./downloads/${fileName}`,
+      ];
       
-      if (!fs.existsSync(filePath)) {
+      let filePath = null;
+      let fileBuffer = null;
+      
+      // Find the file in any of the possible locations
+      for (const testPath of possiblePaths) {
+        try {
+          if (fs.existsSync(testPath)) {
+            filePath = testPath;
+            fileBuffer = fs.readFileSync(testPath);
+            console.log(`Found APK file at: ${testPath}`);
+            break;
+          }
+        } catch (err) {
+          console.log(`Tried path ${testPath}: ${err.message}`);
+        }
+      }
+      
+      if (!fileBuffer) {
+        // List available files for debugging
+        const debugInfo = {
+          searchedPaths: possiblePaths,
+          currentDirectory: process.cwd(),
+          availableFiles: []
+        };
+        
+        try {
+          debugInfo.availableFiles = fs.readdirSync('.');
+        } catch (err) {
+          debugInfo.availableFiles = ['Could not read directory'];
+        }
+        
         return {
           statusCode: 404,
           headers,
           body: JSON.stringify({
             success: false,
             error: 'APK file not found on server',
+            debug: debugInfo,
           }),
         };
       }
-
-      const fileBuffer = fs.readFileSync(filePath);
       
       return {
         statusCode: 200,
