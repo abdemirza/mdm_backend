@@ -16,11 +16,13 @@
   from = "/download/mdm-dpc-app.apk"
   to = "/public/downloads/mdm-dpc-app.apk"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/download/app.apk"
   to = "/public/downloads/mdm-dpc-app.apk"
   status = 200
+  force = true
 
 [[redirects]]
   from = "/*"

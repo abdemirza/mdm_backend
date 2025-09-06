@@ -26,6 +26,13 @@ export const handler = async (event, context) => {
     const allowedFiles = {
       'mdm-dpc-app.apk': './mdm-dpc-app.apk',
       'app.apk': './mdm-dpc-app.apk', // Alias
+      'test.txt': './test.txt', // Test file
+    };
+    
+    // Files that should redirect to public directory
+    const redirectFiles = {
+      'mdm-dpc-app.apk': '/public/downloads/mdm-dpc-app.apk',
+      'app.apk': '/public/downloads/mdm-dpc-app.apk',
     };
 
     if (!allowedFiles[fileName]) {
@@ -71,6 +78,18 @@ export const handler = async (event, context) => {
       }
       
       if (!fileBuffer) {
+        // If it's an APK file, redirect to public directory
+        if (redirectFiles[fileName]) {
+          return {
+            statusCode: 302,
+            headers: {
+              ...headers,
+              'Location': redirectFiles[fileName],
+            },
+            body: '',
+          };
+        }
+        
         // List available files for debugging
         const debugInfo = {
           searchedPaths: possiblePaths,
@@ -89,8 +108,9 @@ export const handler = async (event, context) => {
           headers,
           body: JSON.stringify({
             success: false,
-            error: 'APK file not found on server',
+            error: 'File not found on server',
             debug: debugInfo,
+            redirectSuggestion: redirectFiles[fileName] ? `Try: ${redirectFiles[fileName]}` : null,
           }),
         };
       }
