@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download MDM DPC App</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+            text-align: center;
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+        }
+        .download-button {
+            display: inline-block;
+            background: #28a745;
+            color: white;
+            padding: 15px 30px;
+            text-decoration: none;
+            border-radius: 8px;
+            font-size: 18px;
+            font-weight: bold;
+            margin: 20px 0;
+            transition: background 0.3s;
+        }
+        .download-button:hover {
+            background: #218838;
+        }
+        .info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            text-align: left;
+        }
+        .warning {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            color: #856404;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .step {
+            background: #e9ecef;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            text-align: left;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>📱 MDM DPC App</h1>
+        <p>Device Policy Controller Application</p>
+    </div>
+
+    <h2>Download the DPC App</h2>
+    
+    <a href="/download/mdm-dpc-app.apk" class="download-button" download>
+        📥 Download APK (47MB)
+    </a>
+
+    <div class="info">
+        <h3>📋 Installation Instructions</h3>
+        <div class="step">
+            <strong>Step 1:</strong> Download the APK file above
+        </div>
+        <div class="step">
+            <strong>Step 2:</strong> Enable "Install from Unknown Sources" in your Android device settings
+        </div>
+        <div class="step">
+            <strong>Step 3:</strong> Install the APK file on your device
+        </div>
+        <div class="step">
+            <strong>Step 4:</strong> Follow the device provisioning process
+        </div>
+    </div>
+
+    <div class="warning">
+        <strong>⚠️ Important:</strong> This app is designed for device management and requires special permissions. 
+        Only install on devices that you own or have permission to manage.
+    </div>
+
+    <div class="info">
+        <h3>🔧 Download URLs</h3>
+        <p><strong>Direct Download:</strong> <code>/download/mdm-dpc-app.apk</code></p>
+        <p><strong>Alternative:</strong> <code>/download/app.apk</code></p>
+        <p><strong>Function API:</strong> <code>/api/download/mdm-dpc-app.apk</code></p>
+    </div>
+
+    <div class="info">
+        <h3>📱 Device Requirements</h3>
+        <ul>
+            <li>Android 6.0 (API level 23) or higher</li>
+            <li>Device Owner permissions required</li>
+            <li>Must be installed during device setup</li>
+        </ul>
+    </div>
+
+    <script>
+        // Track download attempts
+        document.querySelector('.download-button').addEventListener('click', function() {
+            console.log('APK download initiated');
+            // You can add analytics tracking here if needed
+        });
+    </script>
+</body>
+</html>
