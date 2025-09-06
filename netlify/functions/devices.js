@@ -1,5 +1,269 @@
-import { AndroidManagementService } from '../../src/services/androidManagementService.js';
-import { logger } from '../../src/config/logger.js';
+import { google } from 'googleapis';
+import fs from 'fs';
+
+// Simple logger for Netlify Functions
+const logger = {
+  info: (message, meta = {}) => console.log(`[INFO] ${message}`, meta),
+  error: (message, meta = {}) => console.error(`[ERROR] ${message}`, meta),
+  warn: (message, meta = {}) => console.warn(`[WARN] ${message}`, meta),
+};
+
+// Android Management Service for Netlify Functions
+class AndroidManagementService {
+  constructor() {
+    this.service = null;
+    this.enterpriseName = `enterprises/${process.env.ENTERPRISE_ID || 'LC048psd8h'}`;
+  }
+
+  async initialize() {
+    try {
+      const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || './mdm_server_key.json';
+      
+      if (!fs.existsSync(credentialsPath)) {
+        logger.error(`Service account file not found at ${credentialsPath}`);
+        return false;
+      }
+
+      const auth = new google.auth.GoogleAuth({
+        keyFile: credentialsPath,
+        scopes: ['https://www.googleapis.com/auth/androidmanagement'],
+      });
+
+      const client = await auth.getClient();
+      this.service = google.androidmanagement({
+        version: 'v1',
+        auth: client,
+      });
+
+      logger.info('Successfully authenticated with Android Management API');
+      return true;
+    } catch (error) {
+      logger.error('Authentication failed:', error);
+      return false;
+    }
+  }
+
+  async listDevices() {
+    try {
+      logger.info(`Listing devices for enterprise: ${this.enterpriseName}`);
+      
+      const response = await this.service.enterprises.devices.list({
+        parent: this.enterpriseName,
+      });
+
+      const devices = response.data.devices || [];
+      
+      logger.info(`Found ${devices.length} devices`);
+      return {
+        success: true,
+        data: devices,
+        message: `Found ${devices.length} devices`,
+      };
+    } catch (error) {
+      logger.error('Error listing devices:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
+  async getDevice(deviceName) {
+    try {
+      logger.info(`Getting device details: ${deviceName}`);
+      
+      const response = await this.service.enterprises.devices.get({
+        name: deviceName,
+      });
+
+      return {
+        success: true,
+        data: response.data,
+        message: 'Device details retrieved successfully',
+      };
+    } catch (error) {
+      logger.error('Error getting device:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
+  async issueCommand(deviceName, command) {
+    try {
+      logger.info(`Issuing command ${command.type} to device: ${deviceName}`);
+      
+      const response = await this.service.enterprises.devices.issueCommand({
+        name: deviceName,
+        requestBody: command,
+      });
+
+      const operation = {
+        name: response.data.name,
+        done: false,
+        response: response.data.metadata,
+      };
+      
+      logger.info('Command issued successfully', { operationName: operation.name });
+      
+      return {
+        success: true,
+        data: operation,
+        message: 'Command issued successfully',
+      };
+    } catch (error) {
+      logger.error('Error issuing command:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
+  async lockDevice(deviceName, duration = '120s') {
+    const command = {
+      type: 'LOCK',
+      duration,
+    };
+    
+    return this.issueCommand(deviceName, command);
+  }
+
+  async unlockDevice(deviceName) {
+    logger.info(`Unlocking device: ${deviceName} (using REBOOT command)`);
+    return this.issueCommand(deviceName, {
+      type: 'REBOOT',
+    });
+  }
+
+  async resetPassword(deviceName) {
+    return this.issueCommand(deviceName, {
+      type: 'RESET_PASSWORD',
+    });
+  }
+
+  async enableLostMode(deviceName, message, phoneNumber, email, streetAddress, organizationName) {
+    logger.info(`Enabling lost mode on device: ${deviceName} with message: ${message}`);
+    
+    const startLostModeParams = {};
+    
+    if (message) {
+      startLostModeParams.lostMessage = { defaultMessage: message };
+    }
+    
+    if (phoneNumber) {
+      startLostModeParams.lostPhoneNumber = { defaultMessage: phoneNumber };
+    }
+    
+    if (email) {
+      startLostModeParams.lostEmailAddress = email;
+    }
+    
+    if (streetAddress) {
+      startLostModeParams.lostStreetAddress = { defaultMessage: streetAddress };
+    }
+    
+    if (organizationName) {
+      startLostModeParams.lostOrganization = { defaultMessage: organizationName };
+    }
+    
+    const command = {
+      type: 'START_LOST_MODE',
+      startLostModeParams,
+    };
+    
+    return this.issueCommand(deviceName, command);
+  }
+
+  async disableLostMode(deviceName) {
+    logger.info(`Disabling lost mode on device: ${deviceName}`);
+    return this.issueCommand(deviceName, {
+      type: 'STOP_LOST_MODE',
+    });
+  }
+
+  async rebootDevice(deviceName) {
+    return this.issueCommand(deviceName, {
+      type: 'REBOOT',
+    });
+  }
+
+  async wipeDevice(deviceName, reason) {
+    return this.issueCommand(deviceName, {
+      type: 'REBOOT',
+    });
+  }
+
+  async getOperationStatus(operationName) {
+    try {
+      logger.info(`Getting operation status: ${operationName}`);
+      
+      const response = await this.service.operations.get({
+        name: operationName,
+      });
+
+      return {
+        success: true,
+        data: response.data,
+        message: 'Operation status retrieved successfully',
+      };
+    } catch (error) {
+      logger.error('Error getting operation status:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
+  async getEnterprise() {
+    try {
+      logger.info(`Getting enterprise details: ${this.enterpriseName}`);
+      
+      const response = await this.service.enterprises.get({
+        name: this.enterpriseName,
+      });
+
+      return {
+        success: true,
+        data: response.data,
+        message: 'Enterprise details retrieved successfully',
+      };
+    } catch (error) {
+      logger.error('Error getting enterprise:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
+  async listPolicies() {
+    try {
+      logger.info(`Listing policies for enterprise: ${this.enterpriseName}`);
+      
+      const response = await this.service.enterprises.policies.list({
+        parent: this.enterpriseName,
+      });
+
+      const policies = response.data.policies || [];
+      
+      logger.info(`Found ${policies.length} policies`);
+      return {
+        success: true,
+        data: policies,
+        message: `Found ${policies.length} policies`,
+      };
+    } catch (error) {
+      logger.error('Error listing policies:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+}
 
 const androidService = new AndroidManagementService();
 

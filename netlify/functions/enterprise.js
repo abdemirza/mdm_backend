@@ -1,5 +1,95 @@
-import { AndroidManagementService } from '../../src/services/androidManagementService.js';
-import { logger } from '../../src/config/logger.js';
+import { google } from 'googleapis';
+import fs from 'fs';
+
+// Simple logger for Netlify Functions
+const logger = {
+  info: (message, meta = {}) => console.log(`[INFO] ${message}`, meta),
+  error: (message, meta = {}) => console.error(`[ERROR] ${message}`, meta),
+  warn: (message, meta = {}) => console.warn(`[WARN] ${message}`, meta),
+};
+
+// Android Management Service for Netlify Functions
+class AndroidManagementService {
+  constructor() {
+    this.service = null;
+    this.enterpriseName = `enterprises/${process.env.ENTERPRISE_ID || 'LC048psd8h'}`;
+  }
+
+  async initialize() {
+    try {
+      const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || './mdm_server_key.json';
+      
+      if (!fs.existsSync(credentialsPath)) {
+        logger.error(`Service account file not found at ${credentialsPath}`);
+        return false;
+      }
+
+      const auth = new google.auth.GoogleAuth({
+        keyFile: credentialsPath,
+        scopes: ['https://www.googleapis.com/auth/androidmanagement'],
+      });
+
+      const client = await auth.getClient();
+      this.service = google.androidmanagement({
+        version: 'v1',
+        auth: client,
+      });
+
+      logger.info('Successfully authenticated with Android Management API');
+      return true;
+    } catch (error) {
+      logger.error('Authentication failed:', error);
+      return false;
+    }
+  }
+
+  async getEnterprise() {
+    try {
+      logger.info(`Getting enterprise details: ${this.enterpriseName}`);
+      
+      const response = await this.service.enterprises.get({
+        name: this.enterpriseName,
+      });
+
+      return {
+        success: true,
+        data: response.data,
+        message: 'Enterprise details retrieved successfully',
+      };
+    } catch (error) {
+      logger.error('Error getting enterprise:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
+  async listPolicies() {
+    try {
+      logger.info(`Listing policies for enterprise: ${this.enterpriseName}`);
+      
+      const response = await this.service.enterprises.policies.list({
+        parent: this.enterpriseName,
+      });
+
+      const policies = response.data.policies || [];
+      
+      logger.info(`Found ${policies.length} policies`);
+      return {
+        success: true,
+        data: policies,
+        message: `Found ${policies.length} policies`,
+      };
+    } catch (error) {
+      logger.error('Error listing policies:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+}
 
 const androidService = new AndroidManagementService();
 
