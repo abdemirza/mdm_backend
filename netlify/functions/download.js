@@ -24,8 +24,8 @@ export const handler = async (event, context) => {
 
     // Only allow specific files for security
     const allowedFiles = {
-      'mdm-dpc-app.apk': './assets/mdm-dpc-app.apk',
-      'app.apk': './assets/mdm-dpc-app.apk', // Alias
+      'mdm-dpc-app.apk': './mdm-dpc-app.apk',
+      'app.apk': './mdm-dpc-app.apk', // Alias
     };
 
     if (!allowedFiles[fileName]) {
@@ -47,8 +47,8 @@ export const handler = async (event, context) => {
       // Try multiple possible paths for the APK file
       const possiblePaths = [
         allowedFiles[fileName],
-        `./assets/${fileName}`,
-        `../assets/${fileName}`,
+        `./${fileName}`,
+        `../${fileName}`,
         `./public/downloads/${fileName}`,
         `./downloads/${fileName}`,
       ];
