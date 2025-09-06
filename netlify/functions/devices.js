@@ -17,13 +17,49 @@ class AndroidManagementService {
 
   async initialize() {
     try {
+      logger.info('Starting authentication process...');
+      logger.info('Environment variables:', {
+        GOOGLE_APPLICATION_CREDENTIALS: process.env.GOOGLE_APPLICATION_CREDENTIALS ? 'SET' : 'NOT SET',
+        ENTERPRISE_ID: process.env.ENTERPRISE_ID || 'NOT SET',
+        NODE_ENV: process.env.NODE_ENV || 'NOT SET',
+        GOOGLE_SERVICE_ACCOUNT_KEY: process.env.GOOGLE_SERVICE_ACCOUNT_KEY ? 'SET' : 'NOT SET'
+      });
+
+      // Check if we have the service account key as environment variable
+      if (process.env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+        logger.info('Using service account key from environment variable');
+        try {
+          const credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_KEY);
+          const auth = new google.auth.GoogleAuth({
+            credentials: credentials,
+            scopes: ['https://www.googleapis.com/auth/androidmanagement'],
+          });
+
+          const client = await auth.getClient();
+          this.service = google.androidmanagement({
+            version: 'v1',
+            auth: client,
+          });
+
+          logger.info('Successfully authenticated with Android Management API using environment credentials');
+          return true;
+        } catch (parseError) {
+          logger.error('Failed to parse GOOGLE_SERVICE_ACCOUNT_KEY:', parseError);
+          return false;
+        }
+      }
+
+      // Fallback to file-based authentication
       const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS || './mdm_server_key.json';
+      logger.info(`Checking for service account file at: ${credentialsPath}`);
       
       if (!fs.existsSync(credentialsPath)) {
         logger.error(`Service account file not found at ${credentialsPath}`);
+        logger.info('Available files in current directory:', fs.readdirSync('.'));
         return false;
       }
 
+      logger.info('Service account file found, proceeding with file-based auth');
       const auth = new google.auth.GoogleAuth({
         keyFile: credentialsPath,
         scopes: ['https://www.googleapis.com/auth/androidmanagement'],
@@ -35,10 +71,15 @@ class AndroidManagementService {
         auth: client,
       });
 
-      logger.info('Successfully authenticated with Android Management API');
+      logger.info('Successfully authenticated with Android Management API using file');
       return true;
     } catch (error) {
       logger.error('Authentication failed:', error);
+      logger.error('Error details:', {
+        message: error.message,
+        stack: error.stack,
+        name: error.name
+      });
       return false;
     }
   }
