@@ -152,6 +152,17 @@ export class AndroidManagementService {
   }
 
   /**
+   * Unlocks a device (removes any active lock)
+   * Note: This uses REBOOT as UNLOCK is not available in Android Management API
+   */
+  async unlockDevice(deviceName: string): Promise<ApiResponse<CommandOperation>> {
+    logger.info(`Unlocking device: ${deviceName} (using REBOOT command)`);
+    return this.issueCommand(deviceName, {
+      type: 'REBOOT',
+    });
+  }
+
+  /**
    * Resets device password
    */
   async resetPassword(deviceName: string): Promise<ApiResponse<CommandOperation>> {
