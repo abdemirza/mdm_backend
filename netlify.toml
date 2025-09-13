@@ -6,23 +6,35 @@
 [build.environment]
   NODE_VERSION = "18"
 
+# Global headers for APK files
+[[headers]]
+  for = "*.apk"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Pragma = "no-cache"
+    Expires = "0"
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+
 [[redirects]]
   from = "/api/*"
   to = "/.netlify/functions/:splat"
   status = 200
 
-# Direct APK download redirects
+# Direct APK download redirects with no-cache headers
 [[redirects]]
   from = "/download/mdm-dpc-app.apk"
   to = "/public/downloads/mdm-dpc-app.apk"
   status = 200
   force = true
+  headers = {X-From = "Netlify", Cache-Control = "no-cache, no-store, must-revalidate", Pragma = "no-cache", Expires = "0"}
 
 [[redirects]]
   from = "/download/app.apk"
   to = "/public/downloads/mdm-dpc-app.apk"
   status = 200
   force = true
+  headers = {X-From = "Netlify", Cache-Control = "no-cache, no-store, must-revalidate", Pragma = "no-cache", Expires = "0"}
 
 [[redirects]]
   from = "/*"

@@ -122,6 +122,12 @@ export const handler = async (event, context) => {
           'Content-Type': 'application/vnd.android.package-archive',
           'Content-Disposition': `attachment; filename="${fileName}"`,
           'Content-Length': fileBuffer.length.toString(),
+          // Disable caching for APK files
+          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Pragma': 'no-cache',
+          'Expires': '0',
+          'Last-Modified': new Date().toUTCString(),
+          'ETag': `"${Date.now()}"`,
         },
         body: fileBuffer.toString('base64'),
         isBase64Encoded: true,

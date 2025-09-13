@@ -13,7 +13,7 @@ provisioning_payload = {
     "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_DOWNLOAD_LOCATION": "https://poetic-llama-889a15.netlify.app/download/mdm-dpc-app.apk",
     "android.app.extra.PROVISIONING_DEVICE_ADMIN_PACKAGE_CHECKSUM": "f4fce84a9b1cdd6911499045752a904800360c08cc42310835364d14dfaec2db",
     "android.app.extra.PROVISIONING_SKIP_ENCRYPTION": True,
-    "android.app.extra.PROVISIONING_ENROLLMENT_TOKEN": "ATVJPGWNHLXPFZGAKIQQ"
+    "android.app.extra.PROVISIONING_ENROLLMENT_TOKEN": "GCXMHNJPILLPRZGKRLWF"
 }
 
 # Convert to JSON string
