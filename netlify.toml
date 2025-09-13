@@ -21,20 +21,35 @@
   to = "/.netlify/functions/:splat"
   status = 200
 
-# Direct APK download redirects with no-cache headers
-[[redirects]]
-  from = "/download/mdm-dpc-app.apk"
-  to = "/public/downloads/mdm-dpc-app.apk"
-  status = 200
-  force = true
-  headers = {X-From = "Netlify", Cache-Control = "no-cache, no-store, must-revalidate", Pragma = "no-cache", Expires = "0"}
+# Direct APK file serving (no redirects)
+[[headers]]
+  for = "/public/downloads/mdm-dpc-app.apk"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Pragma = "no-cache"
+    Expires = "0"
+    Content-Type = "application/vnd.android.package-archive"
+    Content-Disposition = "attachment; filename=\"mdm-dpc-app.apk\""
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, HEAD, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type"
 
-[[redirects]]
-  from = "/download/app.apk"
-  to = "/public/downloads/mdm-dpc-app.apk"
-  status = 200
-  force = true
-  headers = {X-From = "Netlify", Cache-Control = "no-cache, no-store, must-revalidate", Pragma = "no-cache", Expires = "0"}
+# Alternative direct URLs for convenience
+[[headers]]
+  for = "/downloads/mdm-dpc-app.apk"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+    Pragma = "no-cache"
+    Expires = "0"
+    Content-Type = "application/vnd.android.package-archive"
+    Content-Disposition = "attachment; filename=\"mdm-dpc-app.apk\""
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, HEAD, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type"
 
 [[redirects]]
   from = "/*"
