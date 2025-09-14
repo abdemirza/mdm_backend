@@ -5,24 +5,8 @@ const logger = {
   warn: (message, meta = {}) => console.warn(`[WARN] ${message}`, meta),
 };
 
-// In-memory database for custom devices (same as custom-devices.js)
-class DeviceDatabase {
-  constructor() {
-    this.devices = new Map();
-    this.nextId = 1;
-  }
-
-  async getDevice(imei) {
-    return this.devices.get(imei) || null;
-  }
-
-  async getAllDevices() {
-    return Array.from(this.devices.values());
-  }
-}
-
-// Singleton instance
-const deviceDatabase = new DeviceDatabase();
+// Import the device database from custom-devices function
+// Since we can't import directly, we'll make an API call to the custom-devices endpoint
 
 // Simple device status service that works without external dependencies
 class DeviceStatusService {
@@ -34,9 +18,8 @@ class DeviceStatusService {
     try {
       logger.info(`Getting device status by IMEI: ${imei}`);
       
-      // For now, only check custom device database
-      // Android Enterprise integration would require the googleapis module
-      const customDevice = await deviceDatabase.getDevice(imei);
+      // Make API call to custom-devices endpoint to get device data
+      const customDevice = await this.getDeviceFromCustomDevicesAPI(imei);
       
       if (customDevice) {
         const status = {
@@ -83,6 +66,25 @@ class DeviceStatusService {
         success: false,
         error: error instanceof Error ? error.message : 'Unknown error occurred',
       };
+    }
+  }
+
+  async getDeviceFromCustomDevicesAPI(imei) {
+    try {
+      // Get all devices from custom-devices API
+      const response = await fetch('https://poetic-llama-889a15.netlify.app/api/custom-devices');
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        // Find device by IMEI
+        const device = result.data.find(d => d.imei === imei);
+        return device || null;
+      }
+      
+      return null;
+    } catch (error) {
+      logger.error('Error fetching device from custom-devices API:', error);
+      return null;
     }
   }
 }
