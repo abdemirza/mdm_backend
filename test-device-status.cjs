@@ -1,87 +1,138 @@
-const { google } = require('googleapis');
+const https = require('https');
 
-async function testDeviceStatus() {
-  try {
-    console.log('🔍 Checking device status and available commands...');
-    
-    // Initialize auth
-    const auth = new google.auth.GoogleAuth({
-      keyFile: './mdm_server_key.json',
-      scopes: ['https://www.googleapis.com/auth/androidmanagement'],
-    });
+// Configuration
+const BASE_URL = 'https://poetic-llama-889a15.netlify.app/api/device-status';
 
-    const client = await auth.getClient();
-    const service = google.androidmanagement({
-      version: 'v1',
-      auth: client,
-    });
+// Helper function to make HTTP requests
+function makeRequest(url, method = 'GET') {
+  return new Promise((resolve, reject) => {
+    const urlObj = new URL(url);
+    const options = {
+      hostname: urlObj.hostname,
+      port: 443,
+      path: urlObj.pathname + urlObj.search,
+      method: method,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    };
 
-    console.log('✅ Authentication successful');
+    const req = https.request(options, (res) => {
+      let responseData = '';
 
-    const deviceName = 'enterprises/LC048psd8h/devices/36b94e49cf4e18b9';
-    
-    // Get device details
-    console.log('\n📱 Device Details:');
-    const device = await service.enterprises.devices.get({
-      name: deviceName,
-    });
-    
-    console.log('Device Name:', device.data.name);
-    console.log('State:', device.data.state);
-    console.log('Applied State:', device.data.appliedState);
-    console.log('Management Mode:', device.data.managementMode);
-    console.log('Policy Name:', device.data.policyName);
-    console.log('Applied Policy Name:', device.data.appliedPolicyName);
-    console.log('Enrollment Time:', device.data.enrollmentTime);
-    console.log('Last Status Report Time:', device.data.lastStatusReportTime);
-    
-    // Check if device is compliant
-    console.log('\n🔒 Compliance Status:');
-    if (device.data.complianceState) {
-      console.log('Compliance State:', device.data.complianceState);
-    }
-    
-    // Check device hardware info
-    console.log('\n🔧 Hardware Info:');
-    if (device.data.hardwareInfo) {
-      console.log('Model:', device.data.hardwareInfo.model);
-      console.log('Manufacturer:', device.data.hardwareInfo.manufacturer);
-      console.log('Device Type:', device.data.hardwareInfo.deviceType);
-    }
-    
-    // Check if there are any pending operations
-    console.log('\n⏳ Checking for pending operations...');
-    const operations = await service.enterprises.devices.operations.list({
-      name: deviceName,
-      pageSize: 10,
-    });
-    
-    if (operations.data.operations && operations.data.operations.length > 0) {
-      console.log('Pending Operations:');
-      operations.data.operations.forEach((op, index) => {
-        console.log(`${index + 1}. ${op.name} - ${op.metadata?.type} - Done: ${op.done}`);
-        if (op.metadata) {
-          console.log(`   Created: ${op.metadata.createTime}`);
-          console.log(`   Duration: ${op.metadata.duration}`);
+      res.on('data', (chunk) => {
+        responseData += chunk;
+      });
+
+      res.on('end', () => {
+        try {
+          const parsedData = JSON.parse(responseData);
+          resolve({
+            statusCode: res.statusCode,
+            data: parsedData,
+          });
+        } catch (error) {
+          resolve({
+            statusCode: res.statusCode,
+            data: responseData,
+          });
         }
       });
-    } else {
-      console.log('No pending operations found.');
-    }
+    });
 
+    req.on('error', (error) => {
+      reject(error);
+    });
+
+    req.end();
+  });
+}
+
+// Test functions
+async function testDeviceStatusByImei(imei) {
+  console.log(`🔍 Testing Device Status by IMEI: ${imei}...`);
+  
+  try {
+    const response = await makeRequest(`${BASE_URL}/imei/${imei}`);
+    console.log('Device Status Response:', JSON.stringify(response, null, 2));
+    return response.data;
   } catch (error) {
-    console.error('❌ Error:', error.message);
+    console.error('Device Status Error:', error);
+    return null;
   }
 }
 
-testDeviceStatus();
+async function testInvalidImei() {
+  console.log('\n❌ Testing Invalid IMEI Format...');
+  
+  const invalidImei = '123456789'; // Too short
+  try {
+    const response = await makeRequest(`${BASE_URL}/imei/${invalidImei}`);
+    console.log('Invalid IMEI Response:', JSON.stringify(response, null, 2));
+  } catch (error) {
+    console.error('Invalid IMEI Error:', error);
+  }
+}
 
+async function testNonExistentImei() {
+  console.log('\n🔍 Testing Non-Existent IMEI...');
+  
+  const nonExistentImei = '999999999999999'; // Valid format but likely doesn't exist
+  try {
+    const response = await makeRequest(`${BASE_URL}/imei/${nonExistentImei}`);
+    console.log('Non-Existent IMEI Response:', JSON.stringify(response, null, 2));
+  } catch (error) {
+    console.error('Non-Existent IMEI Error:', error);
+  }
+}
 
+async function testCustomDeviceImei() {
+  console.log('\n📱 Testing Custom Device IMEI...');
+  
+  // Use the IMEI from our custom device registration test
+  const customDeviceImei = '123456789012345';
+  try {
+    const response = await makeRequest(`${BASE_URL}/imei/${customDeviceImei}`);
+    console.log('Custom Device IMEI Response:', JSON.stringify(response, null, 2));
+  } catch (error) {
+    console.error('Custom Device IMEI Error:', error);
+  }
+}
 
+// Main test function
+async function runTests() {
+  console.log('🚀 Starting Device Status API Tests...');
+  console.log('=' .repeat(60));
 
+  try {
+    // Test with a sample IMEI (you can replace with actual IMEI from your devices)
+    const sampleImei = '123456789012345';
+    await testDeviceStatusByImei(sampleImei);
+    
+    // Test invalid IMEI format
+    await testInvalidImei();
+    
+    // Test non-existent IMEI
+    await testNonExistentImei();
+    
+    // Test custom device IMEI
+    await testCustomDeviceImei();
 
+    console.log('\n✅ All device status tests completed!');
+  } catch (error) {
+    console.error('❌ Test suite failed:', error);
+  }
+}
 
+// Run tests if this file is executed directly
+if (require.main === module) {
+  runTests();
+}
 
-
-
-
+module.exports = {
+  testDeviceStatusByImei,
+  testInvalidImei,
+  testNonExistentImei,
+  testCustomDeviceImei,
+  runTests,
+};

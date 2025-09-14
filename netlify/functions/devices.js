@@ -280,6 +280,88 @@ class AndroidManagementService {
     }
   }
 
+  async getDeviceStatusByImei(imei) {
+    try {
+      logger.info(`Getting device status by IMEI: ${imei}`);
+      
+      // First, try to find the device in Android Enterprise by IMEI
+      const devices = await this.listDevices();
+      
+      if (devices.success && devices.data) {
+        const device = devices.data.find(d => 
+          d.hardwareInfo && 
+          d.hardwareInfo.serialNumber === imei
+        );
+        
+        if (device) {
+          // Device found in Android Enterprise
+          const status = {
+            imei: imei,
+            source: 'android_enterprise',
+            deviceName: device.name,
+            model: device.hardwareInfo?.model || 'Unknown',
+            manufacturer: device.hardwareInfo?.manufacturer || 'Unknown',
+            osVersion: device.softwareInfo?.androidVersion || 'Unknown',
+            policyName: device.policyName || 'No policy assigned',
+            state: device.state || 'UNKNOWN',
+            managementMode: device.managementMode || 'UNKNOWN',
+            appliedState: device.appliedState || 'UNKNOWN',
+            enrollmentTokenName: device.enrollmentTokenName || 'No enrollment token',
+            lastStatusReportTime: device.lastStatusReportTime || 'Never',
+            lastPolicySyncTime: device.lastPolicySyncTime || 'Never',
+            userName: device.userName || 'No user',
+            hardwareInfo: device.hardwareInfo || {},
+            softwareInfo: device.softwareInfo || {},
+            policyCompliant: device.policyCompliant || false,
+            deviceSettings: device.deviceSettings || {},
+            networkInfo: device.networkInfo || {},
+            memoryInfo: device.memoryInfo || {},
+            powerManagementEvents: device.powerManagementEvents || [],
+            appliedPolicyName: device.appliedPolicyName || 'No applied policy',
+            appliedPolicyVersion: device.appliedPolicyVersion || '0',
+            appliedState: device.appliedState || 'UNKNOWN',
+            disabledReason: device.disabledReason || null,
+            enrollmentTime: device.enrollmentTime || 'Not enrolled',
+            lastPolicyComplianceReportTime: device.lastPolicyComplianceReportTime || 'Never',
+            lastStatusReportTime: device.lastStatusReportTime || 'Never',
+            memoryEvents: device.memoryEvents || [],
+            networkEvents: device.networkEvents || [],
+            powerManagementEvents: device.powerManagementEvents || [],
+            systemProperties: device.systemProperties || {},
+            userOwners: device.userOwners || [],
+            nonComplianceDetails: device.nonComplianceDetails || []
+          };
+          
+          return {
+            success: true,
+            data: status,
+            message: 'Device status retrieved from Android Enterprise',
+          };
+        }
+      }
+      
+      // If not found in Android Enterprise, check custom device database
+      // Note: This would require importing the custom device service
+      // For now, return not found
+      return {
+        success: false,
+        error: 'Device not found in Android Enterprise',
+        data: {
+          imei: imei,
+          source: 'not_found',
+          message: 'Device not found in Android Enterprise. Check custom device database or verify IMEI.'
+        }
+      };
+      
+    } catch (error) {
+      logger.error('Error getting device status by IMEI:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
   async listPolicies() {
     try {
       logger.info(`Listing policies for enterprise: ${this.enterpriseName}`);
@@ -414,6 +496,15 @@ export const handler = async (event, context) => {
           const result = await androidService.getEnterprise();
           return {
             statusCode: result.success ? 200 : 500,
+            headers,
+            body: JSON.stringify(result),
+          };
+        } else if (devicePath.startsWith('status/imei/')) {
+          // GET /api/devices/status/imei/{imei} - Get device status by IMEI
+          const imei = devicePath.replace('status/imei/', '');
+          const result = await androidService.getDeviceStatusByImei(imei);
+          return {
+            statusCode: result.success ? 200 : 404,
             headers,
             body: JSON.stringify(result),
           };
