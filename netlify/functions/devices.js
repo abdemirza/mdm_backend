@@ -304,6 +304,43 @@ class AndroidManagementService {
       };
     }
   }
+
+  async createPolicy(policyData) {
+    try {
+      logger.info(`Creating policy for enterprise: ${this.enterpriseName}`);
+      
+      // Generate a unique policy name
+      const policyId = policyData.policyId || `policy_${Date.now()}`;
+      const policyName = `${this.enterpriseName}/policies/${policyId}`;
+      
+      // Prepare the policy request
+      const policyRequest = {
+        parent: this.enterpriseName,
+        policyId: policyId,
+        resource: {
+          name: policyName,
+          displayName: policyData.displayName || `Policy ${policyId}`,
+          description: policyData.description || 'Custom policy created via API',
+          ...policyData.settings
+        }
+      };
+
+      const response = await this.service.enterprises.policies.create(policyRequest);
+      
+      logger.info(`Policy created successfully: ${policyName}`);
+      return {
+        success: true,
+        data: response.data,
+        message: 'Policy created successfully',
+      };
+    } catch (error) {
+      logger.error('Error creating policy:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
 }
 
 const androidService = new AndroidManagementService();
@@ -472,6 +509,14 @@ export const handler = async (event, context) => {
           const result = await androidService.issueCommand(deviceName, requestBody);
           return {
             statusCode: result.success ? 200 : 500,
+            headers,
+            body: JSON.stringify(result),
+          };
+        } else if (devicePath === 'policies') {
+          // POST /api/devices/policies - Create a new policy
+          const result = await androidService.createPolicy(requestBody);
+          return {
+            statusCode: result.success ? 201 : 400,
             headers,
             body: JSON.stringify(result),
           };
