@@ -313,19 +313,19 @@ class AndroidManagementService {
       const policyId = policyData.policyId || `policy_${Date.now()}`;
       const policyName = `${this.enterpriseName}/policies/${policyId}`;
       
-      // Prepare the policy request
-      const policyRequest = {
-        parent: this.enterpriseName,
-        policyId: policyId,
-        resource: {
-          name: policyName,
-          displayName: policyData.displayName || `Policy ${policyId}`,
-          description: policyData.description || 'Custom policy created via API',
-          ...policyData.settings
-        }
+      // Prepare the policy resource
+      const policyResource = {
+        name: policyName,
+        displayName: policyData.displayName || `Policy ${policyId}`,
+        description: policyData.description || 'Custom policy created via API',
+        ...policyData.settings
       };
 
-      const response = await this.service.enterprises.policies.create(policyRequest);
+      // Use patch method to create/update policy
+      const response = await this.service.enterprises.policies.patch({
+        name: policyName,
+        resource: policyResource,
+      });
       
       logger.info(`Policy created successfully: ${policyName}`);
       return {
