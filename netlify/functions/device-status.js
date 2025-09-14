@@ -69,15 +69,15 @@ class DeviceStatusService {
     }
   }
 
-  async getDeviceFromCustomDevicesAPI(imei) {
+  async getDeviceFromCustomDevicesAPI(identifier) {
     try {
       // Get all devices from custom-devices API
       const response = await fetch('https://poetic-llama-889a15.netlify.app/api/custom-devices');
       const result = await response.json();
       
       if (result.success && result.data) {
-        // Find device by IMEI
-        const device = result.data.find(d => d.imei === imei);
+        // Find device by IMEI or androidId
+        const device = result.data.find(d => d.imei === identifier || d.androidId === identifier);
         return device || null;
       }
       
@@ -138,13 +138,35 @@ export const handler = async (event, context) => {
           headers,
           body: JSON.stringify(result),
         };
+      } else if (devicePath.startsWith('androidid/')) {
+        // GET /api/device-status/androidid/{androidId} - Get device status by Android ID
+        const androidId = devicePath.replace('androidid/', '');
+        
+        // Validate androidId format
+        if (!/^[a-f0-9]{16}$/.test(androidId)) {
+          return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({
+              success: false,
+              error: 'Invalid androidId format. androidId must be 16 hexadecimal characters.',
+            }),
+          };
+        }
+        
+        const result = await deviceStatusService.getDeviceStatusByImei(androidId);
+        return {
+          statusCode: result.success ? 200 : 404,
+          headers,
+          body: JSON.stringify(result),
+        };
       } else {
         return {
           statusCode: 404,
           headers,
           body: JSON.stringify({
             success: false,
-            error: 'Endpoint not found. Use /api/device-status/imei/{imei}',
+            error: 'Endpoint not found. Use /api/device-status/imei/{imei} or /api/device-status/androidid/{androidId}',
           }),
         };
       }

@@ -23,9 +23,13 @@ class DeviceDatabase {
         lastSeen: new Date().toISOString(),
       };
 
+      // Store device by both IMEI and androidId for flexible lookup
       this.devices.set(device.imei, device);
+      if (device.androidId) {
+        this.devices.set(device.androidId, device);
+      }
       
-      logger.info(`Device registered: IMEI ${device.imei}`, { deviceId: device.id });
+      logger.info(`Device registered: IMEI ${device.imei}, AndroidId ${device.androidId}`, { deviceId: device.id });
       
       return device;
     } catch (error) {
@@ -34,12 +38,13 @@ class DeviceDatabase {
     }
   }
 
-  async getDevice(imei) {
-    return this.devices.get(imei) || null;
+  async getDevice(identifier) {
+    // Try to get device by identifier (could be IMEI or androidId)
+    return this.devices.get(identifier) || null;
   }
 
-  async updateDeviceStatus(imei, updates) {
-    const device = this.devices.get(imei);
+  async updateDeviceStatus(identifier, updates) {
+    const device = this.devices.get(identifier);
     if (!device) {
       return null;
     }
@@ -50,15 +55,19 @@ class DeviceDatabase {
       lastSeen: new Date().toISOString(),
     };
 
-    this.devices.set(imei, updatedDevice);
+    // Update both IMEI and androidId entries
+    this.devices.set(device.imei, updatedDevice);
+    if (device.androidId) {
+      this.devices.set(device.androidId, updatedDevice);
+    }
     
-    logger.info(`Device updated: IMEI ${imei}`, { updates });
+    logger.info(`Device updated: IMEI ${device.imei}, AndroidId ${device.androidId}`, { updates });
     
     return updatedDevice;
   }
 
-  async lockDevice(imei) {
-    const device = this.devices.get(imei);
+  async lockDevice(identifier) {
+    const device = this.devices.get(identifier);
     if (!device) {
       return null;
     }
@@ -71,15 +80,19 @@ class DeviceDatabase {
       lastSeen: new Date().toISOString(),
     };
 
-    this.devices.set(imei, updatedDevice);
+    // Update both IMEI and androidId entries
+    this.devices.set(device.imei, updatedDevice);
+    if (device.androidId) {
+      this.devices.set(device.androidId, updatedDevice);
+    }
     
-    logger.info(`Device locked: IMEI ${imei}`);
+    logger.info(`Device locked: IMEI ${device.imei}, AndroidId ${device.androidId}`);
     
     return updatedDevice;
   }
 
-  async unlockDevice(imei) {
-    const device = this.devices.get(imei);
+  async unlockDevice(identifier) {
+    const device = this.devices.get(identifier);
     if (!device) {
       return null;
     }
@@ -92,19 +105,29 @@ class DeviceDatabase {
       lastSeen: new Date().toISOString(),
     };
 
-    this.devices.set(imei, updatedDevice);
+    // Update both IMEI and androidId entries
+    this.devices.set(device.imei, updatedDevice);
+    if (device.androidId) {
+      this.devices.set(device.androidId, updatedDevice);
+    }
     
-    logger.info(`Device unlocked: IMEI ${imei}`);
+    logger.info(`Device unlocked: IMEI ${device.imei}, AndroidId ${device.androidId}`);
     
     return updatedDevice;
   }
 
   async getAllDevices() {
-    return Array.from(this.devices.values());
+    // Get unique devices by filtering out duplicates (since we store by both IMEI and androidId)
+    const devices = Array.from(this.devices.values());
+    const uniqueDevices = devices.filter((device, index, self) => 
+      index === self.findIndex(d => d.id === device.id)
+    );
+    return uniqueDevices;
   }
 
   async getDevicesByStatus(status) {
-    return Array.from(this.devices.values()).filter(device => device.status === status);
+    const devices = await this.getAllDevices();
+    return devices.filter(device => device.status === status);
   }
 }
 
@@ -394,27 +417,39 @@ export const handler = async (event, context) => {
 async function handleDeviceRegistration(requestBody, headers) {
   try {
     // Validate required fields
-    const { imei } = requestBody;
+    const { imei, androidId } = requestBody;
     
-    if (!imei) {
+    if (!imei && !androidId) {
       return {
         statusCode: 400,
         headers,
         body: JSON.stringify({
           success: false,
-          error: 'IMEI is required',
+          error: 'Either IMEI or androidId is required',
         }),
       };
     }
 
-    // Validate IMEI format (basic validation)
-    if (!/^\d{15}$/.test(imei)) {
+    // Validate IMEI format if provided (basic validation)
+    if (imei && !/^\d{15}$/.test(imei)) {
       return {
         statusCode: 400,
         headers,
         body: JSON.stringify({
           success: false,
           error: 'IMEI must be 15 digits',
+        }),
+      };
+    }
+
+    // Validate androidId format if provided (basic validation)
+    if (androidId && !/^[a-f0-9]{16}$/.test(androidId)) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: 'androidId must be 16 hexadecimal characters',
         }),
       };
     }
@@ -442,20 +477,21 @@ async function handleDeviceRegistration(requestBody, headers) {
 
 async function handleDeviceLock(requestBody, headers) {
   try {
-    const { imei } = requestBody;
+    const { imei, androidId } = requestBody;
     
-    if (!imei) {
+    if (!imei && !androidId) {
       return {
         statusCode: 400,
         headers,
         body: JSON.stringify({
           success: false,
-          error: 'IMEI is required',
+          error: 'Either IMEI or androidId is required',
         }),
       };
     }
 
-    const result = await DeviceDatabaseService.lockDevice(imei);
+    const identifier = imei || androidId;
+    const result = await DeviceDatabaseService.lockDevice(identifier);
     
     return {
       statusCode: result.success ? 200 : 404,
@@ -478,20 +514,21 @@ async function handleDeviceLock(requestBody, headers) {
 
 async function handleDeviceUnlock(requestBody, headers) {
   try {
-    const { imei } = requestBody;
+    const { imei, androidId } = requestBody;
     
-    if (!imei) {
+    if (!imei && !androidId) {
       return {
         statusCode: 400,
         headers,
         body: JSON.stringify({
           success: false,
-          error: 'IMEI is required',
+          error: 'Either IMEI or androidId is required',
         }),
       };
     }
 
-    const result = await DeviceDatabaseService.unlockDevice(imei);
+    const identifier = imei || androidId;
+    const result = await DeviceDatabaseService.unlockDevice(identifier);
     
     return {
       statusCode: result.success ? 200 : 404,
@@ -514,20 +551,21 @@ async function handleDeviceUnlock(requestBody, headers) {
 
 async function handleDeviceStatusUpdate(requestBody, headers) {
   try {
-    const { imei, ...updates } = requestBody;
+    const { imei, androidId, ...updates } = requestBody;
     
-    if (!imei) {
+    if (!imei && !androidId) {
       return {
         statusCode: 400,
         headers,
         body: JSON.stringify({
           success: false,
-          error: 'IMEI is required',
+          error: 'Either IMEI or androidId is required',
         }),
       };
     }
 
-    const result = await DeviceDatabaseService.updateDeviceStatus(imei, updates);
+    const identifier = imei || androidId;
+    const result = await DeviceDatabaseService.updateDeviceStatus(identifier, updates);
     
     return {
       statusCode: result.success ? 200 : 404,
