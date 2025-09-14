@@ -364,6 +364,22 @@ export const handler = async (event, context) => {
             headers,
             body: JSON.stringify(result),
           };
+        } else if (devicePath === 'policies') {
+          // GET /api/devices/policies - List all policies
+          const result = await androidService.listPolicies();
+          return {
+            statusCode: result.success ? 200 : 500,
+            headers,
+            body: JSON.stringify(result),
+          };
+        } else if (devicePath === 'enterprise') {
+          // GET /api/devices/enterprise - Get enterprise details
+          const result = await androidService.getEnterprise();
+          return {
+            statusCode: result.success ? 200 : 500,
+            headers,
+            body: JSON.stringify(result),
+          };
         } else {
           // GET /api/devices/:deviceName - Get device details
           const result = await androidService.getDevice(devicePath);
