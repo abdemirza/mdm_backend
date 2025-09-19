@@ -9,9 +9,10 @@ https://poetic-llama-889a15.netlify.app/api/fcm
 
 ## Prerequisites
 
-1. **FCM Server Key**: Set the `FCM_SERVER_KEY` environment variable in Netlify
-2. **Device Registration**: Devices must be registered with FCM tokens
-3. **FCM Client**: Device app must be configured to receive FCM messages
+1. **Firebase Service Account**: Set the `FIREBASE_SERVICE_ACCOUNT_KEY` environment variable in Netlify
+2. **Firebase Project ID**: Set the `FIREBASE_PROJECT_ID` environment variable in Netlify
+3. **Device Registration**: Devices must be registered with FCM tokens
+4. **FCM Client**: Device app must be configured to receive FCM messages
 
 ## Endpoints
 
@@ -470,9 +471,25 @@ node test-fcm.cjs
 
 ## Environment Variables
 
-Set the following environment variable in Netlify:
+Set the following environment variables in Netlify:
 
-- `FCM_SERVER_KEY`: Your Firebase Cloud Messaging server key
+- `FIREBASE_SERVICE_ACCOUNT_KEY`: Your Firebase service account JSON key (as a string)
+- `FIREBASE_PROJECT_ID`: Your Firebase project ID
+
+### Setting up Firebase Service Account
+
+1. **Go to Firebase Console**: Navigate to your Firebase project
+2. **Project Settings**: Click the gear icon next to "Project Overview"
+3. **Service Accounts Tab**: Click on "Service accounts" tab
+4. **Generate New Private Key**: Click "Generate new private key"
+5. **Download JSON**: Save the downloaded JSON file securely
+6. **Set Environment Variable**: Copy the entire JSON content and set it as `FIREBASE_SERVICE_ACCOUNT_KEY` in Netlify
+
+**Important Security Notes:**
+- Never commit the service account JSON to version control
+- Store it securely in environment variables only
+- The JSON contains private key information
+- Rotate keys regularly for security
 
 ## Notes
 

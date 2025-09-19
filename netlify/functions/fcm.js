@@ -5,65 +5,158 @@ const logger = {
   warn: (message, meta = {}) => console.warn(`[WARN] ${message}`, meta),
 };
 
-// FCM Service for sending push notifications to devices
+// FCM Service for sending push notifications to devices using Firebase Admin SDK
 class FCMService {
   constructor() {
-    this.serverKey = process.env.FCM_SERVER_KEY;
-    this.fcmUrl = 'https://fcm.googleapis.com/fcm/send';
+    this.serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+    this.projectId = process.env.FIREBASE_PROJECT_ID;
+    this.accessToken = null;
+    this.tokenExpiry = null;
+  }
+
+  async getAccessToken() {
+    try {
+      // Check if we have a valid cached token
+      if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
+        return this.accessToken;
+      }
+
+      if (!this.serviceAccountKey) {
+        throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY environment variable not set');
+      }
+
+      if (!this.projectId) {
+        throw new Error('FIREBASE_PROJECT_ID environment variable not set');
+      }
+
+      // Parse the service account key
+      const serviceAccount = JSON.parse(this.serviceAccountKey);
+      
+      // Create JWT for authentication
+      const jwt = await this.createJWT(serviceAccount);
+      
+      // Exchange JWT for access token
+      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          assertion: jwt
+        })
+      });
+
+      const tokenData = await tokenResponse.json();
+
+      if (!tokenResponse.ok) {
+        throw new Error(`Failed to get access token: ${tokenData.error || 'Unknown error'}`);
+      }
+
+      // Cache the token
+      this.accessToken = tokenData.access_token;
+      this.tokenExpiry = Date.now() + (tokenData.expires_in * 1000) - 60000; // 1 minute buffer
+
+      return this.accessToken;
+
+    } catch (error) {
+      logger.error('Error getting access token:', error);
+      throw error;
+    }
+  }
+
+  async createJWT(serviceAccount) {
+    const header = {
+      alg: 'RS256',
+      typ: 'JWT'
+    };
+
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      iss: serviceAccount.client_email,
+      scope: 'https://www.googleapis.com/auth/firebase.messaging',
+      aud: 'https://oauth2.googleapis.com/token',
+      iat: now,
+      exp: now + 3600 // 1 hour
+    };
+
+    // Create JWT header and payload
+    const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64url');
+    const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const unsignedToken = `${encodedHeader}.${encodedPayload}`;
+
+    // Sign with private key
+    const crypto = require('crypto');
+    const sign = crypto.createSign('RSA-SHA256');
+    sign.update(unsignedToken);
+    const signature = sign.sign(serviceAccount.private_key, 'base64url');
+
+    return `${unsignedToken}.${signature}`;
   }
 
   async sendNotificationToDevice(fcmToken, title, body, data = {}) {
     try {
-      if (!this.serverKey) {
-        throw new Error('FCM_SERVER_KEY environment variable not set');
-      }
-
       if (!fcmToken) {
         throw new Error('FCM token is required');
       }
 
-      const payload = {
-        to: fcmToken,
-        notification: {
-          title: title,
-          body: body,
-          sound: 'default',
-          badge: 1
-        },
-        data: {
-          ...data,
-          timestamp: new Date().toISOString()
-        },
-        priority: 'high',
-        time_to_live: 3600 // 1 hour
+      const accessToken = await this.getAccessToken();
+      
+      const message = {
+        message: {
+          token: fcmToken,
+          notification: {
+            title: title,
+            body: body
+          },
+          data: {
+            ...data,
+            timestamp: new Date().toISOString()
+          },
+          android: {
+            priority: 'high',
+            ttl: '3600s'
+          },
+          apns: {
+            headers: {
+              'apns-priority': '10'
+            },
+            payload: {
+              aps: {
+                sound: 'default',
+                badge: 1
+              }
+            }
+          }
+        }
       };
 
-      const response = await fetch(this.fcmUrl, {
+      const response = await fetch(`https://fcm.googleapis.com/v1/projects/${this.projectId}/messages:send`, {
         method: 'POST',
         headers: {
-          'Authorization': `key=${this.serverKey}`,
+          'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(message)
       });
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(`FCM request failed: ${result.error || 'Unknown error'}`);
+        throw new Error(`FCM request failed: ${result.error?.message || 'Unknown error'}`);
       }
 
       logger.info('FCM notification sent successfully', { 
         fcmToken: fcmToken.substring(0, 20) + '...',
-        messageId: result.message_id,
-        success: result.success 
+        messageId: result.name,
+        success: true 
       });
 
       return {
         success: true,
-        messageId: result.message_id,
-        successCount: result.success || 0,
-        failureCount: result.failure || 0,
+        messageId: result.name,
+        successCount: 1,
+        failureCount: 0,
         data: result
       };
 

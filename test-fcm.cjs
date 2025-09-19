@@ -219,9 +219,11 @@ async function runTests() {
 
     console.log('\n✅ All FCM integration tests completed!');
     console.log('\n📝 Note: FCM commands will only work if:');
-    console.log('   1. FCM_SERVER_KEY environment variable is set in Netlify');
-    console.log('   2. The device has a valid FCM token');
-    console.log('   3. The device app is configured to receive FCM messages');
+    console.log('   1. FIREBASE_SERVICE_ACCOUNT_KEY environment variable is set in Netlify');
+    console.log('   2. FIREBASE_PROJECT_ID environment variable is set in Netlify');
+    console.log('   3. The device has a valid FCM token');
+    console.log('   4. The device app is configured to receive FCM messages');
+    console.log('\n🔧 Setup Guide: See FIREBASE_SETUP.md for detailed setup instructions');
   } catch (error) {
     console.error('❌ Test suite failed:', error);
   }
