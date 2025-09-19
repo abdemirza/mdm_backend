@@ -359,56 +359,29 @@ const deviceDatabase = new DeviceDatabase();
 
 // FCM Database Service
 class FCMDatabaseService {
-  static async getDeviceFromCustomDevicesAPI(identifier) {
-    try {
-      // Make internal API call to custom-devices endpoint
-      const response = await fetch('https://poetic-llama-889a15.netlify.app/api/custom-devices', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Custom devices API call failed: ${response.status}`);
-      }
-
-      const result = await response.json();
-      
-      if (result.success && result.data) {
-        // Find device by IMEI or androidId
-        const device = result.data.find(d => 
-          d.imei === identifier || d.androidId === identifier
-        );
-        return device || null;
-      }
-      
-      return null;
-    } catch (error) {
-      logger.error('Error fetching device from custom devices API:', error);
-      return null;
-    }
-  }
-
   static async updateFCMToken(identifier, fcmToken) {
     try {
-      // First, get the device from custom devices API
-      const device = await this.getDeviceFromCustomDevicesAPI(identifier);
+      // Use shared device database
+      const sharedDb = await import('./shared-device-database.js');
+      const database = sharedDb.getSharedDeviceDatabase();
+      
+      // Check if device exists
+      const device = await database.getDevice(identifier);
       
       if (!device) {
         return {
           success: false,
-          error: 'Device not found in custom devices database',
+          error: 'Device not found in database',
         };
       }
 
-      // Update the device with FCM token in our local database
-      const updatedDevice = await deviceDatabase.updateDeviceFCMToken(identifier, fcmToken);
+      // Update the device with FCM token
+      const updatedDevice = await database.updateDeviceFCMToken(identifier, fcmToken);
       
       if (!updatedDevice) {
         return {
           success: false,
-          error: 'Failed to update FCM token in local database',
+          error: 'Failed to update FCM token',
         };
       }
 
@@ -428,20 +401,21 @@ class FCMDatabaseService {
 
   static async sendLockCommand(identifier) {
     try {
-      // First, get the device from custom devices API
-      const device = await this.getDeviceFromCustomDevicesAPI(identifier);
+      // Use shared device database
+      const sharedDb = await import('./shared-device-database.js');
+      const database = sharedDb.getSharedDeviceDatabase();
+      
+      // Get device from shared database
+      const device = await database.getDevice(identifier);
       
       if (!device) {
         return {
           success: false,
-          error: 'Device not found in custom devices database',
+          error: 'Device not found in database',
         };
       }
 
-      // Check if device has FCM token in our local database
-      const localDevice = await deviceDatabase.getDevice(identifier);
-      
-      if (!localDevice || !localDevice.fcmToken) {
+      if (!device.fcmToken) {
         return {
           success: false,
           error: 'Device does not have FCM token registered. Please register FCM token first.',
@@ -449,7 +423,7 @@ class FCMDatabaseService {
       }
 
       // Send FCM lock command
-      const fcmResult = await fcmService.sendLockCommand(localDevice.fcmToken, {
+      const fcmResult = await fcmService.sendLockCommand(device.fcmToken, {
         imei: device.imei,
         androidId: device.androidId,
         deviceName: device.deviceName,
@@ -457,8 +431,8 @@ class FCMDatabaseService {
       });
 
       if (fcmResult.success) {
-        // Update device status to locked in local database
-        const updatedDevice = await deviceDatabase.lockDevice(identifier);
+        // Update device status to locked in shared database
+        const updatedDevice = await database.lockDevice(identifier);
         
         return {
           success: true,
@@ -485,20 +459,21 @@ class FCMDatabaseService {
 
   static async sendUnlockCommand(identifier) {
     try {
-      // First, get the device from custom devices API
-      const device = await this.getDeviceFromCustomDevicesAPI(identifier);
+      // Use shared device database
+      const sharedDb = await import('./shared-device-database.js');
+      const database = sharedDb.getSharedDeviceDatabase();
+      
+      // Get device from shared database
+      const device = await database.getDevice(identifier);
       
       if (!device) {
         return {
           success: false,
-          error: 'Device not found in custom devices database',
+          error: 'Device not found in database',
         };
       }
 
-      // Check if device has FCM token in our local database
-      const localDevice = await deviceDatabase.getDevice(identifier);
-      
-      if (!localDevice || !localDevice.fcmToken) {
+      if (!device.fcmToken) {
         return {
           success: false,
           error: 'Device does not have FCM token registered. Please register FCM token first.',
@@ -506,7 +481,7 @@ class FCMDatabaseService {
       }
 
       // Send FCM unlock command
-      const fcmResult = await fcmService.sendUnlockCommand(localDevice.fcmToken, {
+      const fcmResult = await fcmService.sendUnlockCommand(device.fcmToken, {
         imei: device.imei,
         androidId: device.androidId,
         deviceName: device.deviceName,
@@ -514,8 +489,8 @@ class FCMDatabaseService {
       });
 
       if (fcmResult.success) {
-        // Update device status to unlocked in local database
-        const updatedDevice = await deviceDatabase.unlockDevice(identifier);
+        // Update device status to unlocked in shared database
+        const updatedDevice = await database.unlockDevice(identifier);
         
         return {
           success: true,
@@ -542,20 +517,21 @@ class FCMDatabaseService {
 
   static async sendCustomCommand(identifier, command, title, body, data = {}) {
     try {
-      // First, get the device from custom devices API
-      const device = await this.getDeviceFromCustomDevicesAPI(identifier);
+      // Use shared device database
+      const sharedDb = await import('./shared-device-database.js');
+      const database = sharedDb.getSharedDeviceDatabase();
+      
+      // Get device from shared database
+      const device = await database.getDevice(identifier);
       
       if (!device) {
         return {
           success: false,
-          error: 'Device not found in custom devices database',
+          error: 'Device not found in database',
         };
       }
 
-      // Check if device has FCM token in our local database
-      const localDevice = await deviceDatabase.getDevice(identifier);
-      
-      if (!localDevice || !localDevice.fcmToken) {
+      if (!device.fcmToken) {
         return {
           success: false,
           error: 'Device does not have FCM token registered. Please register FCM token first.',
@@ -564,7 +540,7 @@ class FCMDatabaseService {
 
       // Send FCM custom command
       const fcmResult = await fcmService.sendCustomCommand(
-        localDevice.fcmToken, 
+        device.fcmToken, 
         command, 
         title, 
         body, 
