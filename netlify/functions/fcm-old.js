@@ -5,15 +5,11 @@ const logger = {
   warn: (message, meta = {}) => console.warn(`[WARN] ${message}`, meta),
 };
 
-// Optimized FCM Service using individual environment variables instead of large JSON
-class OptimizedFCMService {
+// FCM Service for sending push notifications to devices using Firebase Admin SDK
+class FCMService {
   constructor() {
-    // Use individual environment variables instead of large JSON
+    this.serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
     this.projectId = process.env.FIREBASE_PROJECT_ID;
-    this.clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-    this.privateKey = process.env.FIREBASE_PRIVATE_KEY;
-    this.privateKeyId = process.env.FIREBASE_PRIVATE_KEY_ID;
-    this.clientId = process.env.FIREBASE_CLIENT_ID;
     this.accessToken = null;
     this.tokenExpiry = null;
   }
@@ -25,12 +21,19 @@ class OptimizedFCMService {
         return this.accessToken;
       }
 
-      if (!this.clientEmail || !this.privateKey || !this.projectId) {
-        throw new Error('Firebase environment variables not set. Please set FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY, and FIREBASE_PROJECT_ID');
+      if (!this.serviceAccountKey) {
+        throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY environment variable not set');
       }
 
+      if (!this.projectId) {
+        throw new Error('FIREBASE_PROJECT_ID environment variable not set');
+      }
+
+      // Parse the service account key
+      const serviceAccount = JSON.parse(this.serviceAccountKey);
+      
       // Create JWT for authentication
-      const jwt = await this.createJWT();
+      const jwt = await this.createJWT(serviceAccount);
       
       // Exchange JWT for access token
       const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
@@ -62,7 +65,7 @@ class OptimizedFCMService {
     }
   }
 
-  async createJWT() {
+  async createJWT(serviceAccount) {
     const header = {
       alg: 'RS256',
       typ: 'JWT'
@@ -70,7 +73,7 @@ class OptimizedFCMService {
 
     const now = Math.floor(Date.now() / 1000);
     const payload = {
-      iss: this.clientEmail,
+      iss: serviceAccount.client_email,
       scope: 'https://www.googleapis.com/auth/firebase.messaging',
       aud: 'https://oauth2.googleapis.com/token',
       iat: now,
@@ -86,7 +89,7 @@ class OptimizedFCMService {
     const crypto = require('crypto');
     const sign = crypto.createSign('RSA-SHA256');
     sign.update(unsignedToken);
-    const signature = sign.sign(this.privateKey, 'base64url');
+    const signature = sign.sign(serviceAccount.private_key, 'base64url');
 
     return `${unsignedToken}.${signature}`;
   }
@@ -198,6 +201,22 @@ class OptimizedFCMService {
     );
   }
 
+  async sendWipeCommand(fcmToken, deviceInfo = {}) {
+    const wipeData = {
+      command: 'WIPE_DEVICE',
+      action: 'wipe',
+      deviceInfo: deviceInfo,
+      timestamp: new Date().toISOString()
+    };
+
+    return await this.sendNotificationToDevice(
+      fcmToken,
+      'Device Wipe Command',
+      'Your device will be wiped by the administrator',
+      wipeData
+    );
+  }
+
   async sendCustomCommand(fcmToken, command, title, body, data = {}) {
     const commandData = {
       command: command,
@@ -215,10 +234,37 @@ class OptimizedFCMService {
   }
 }
 
-// Simple in-memory device database
-class SimpleDeviceDatabase {
+// Device Database with FCM token support
+class DeviceDatabase {
   constructor() {
     this.devices = new Map();
+    this.nextId = 1;
+  }
+
+  async registerDevice(deviceData) {
+    try {
+      const device = {
+        id: this.nextId++,
+        ...deviceData,
+        isLocked: false,
+        registeredAt: new Date().toISOString(),
+        status: 'active',
+        lastSeen: new Date().toISOString(),
+      };
+
+      // Store device by both IMEI and androidId for flexible lookup
+      this.devices.set(device.imei, device);
+      if (device.androidId) {
+        this.devices.set(device.androidId, device);
+      }
+      
+      logger.info(`Device registered: IMEI ${device.imei}, AndroidId ${device.androidId}`, { deviceId: device.id });
+      
+      return device;
+    } catch (error) {
+      logger.error('Error registering device:', error);
+      throw error;
+    }
   }
 
   async getDevice(identifier) {
@@ -237,7 +283,14 @@ class SimpleDeviceDatabase {
       lastSeen: new Date().toISOString(),
     };
 
-    this.devices.set(identifier, updatedDevice);
+    // Update both IMEI and androidId entries
+    this.devices.set(device.imei, updatedDevice);
+    if (device.androidId) {
+      this.devices.set(device.androidId, updatedDevice);
+    }
+    
+    logger.info(`FCM token updated: IMEI ${device.imei}, AndroidId ${device.androidId}`, { fcmToken: fcmToken.substring(0, 20) + '...' });
+    
     return updatedDevice;
   }
 
@@ -255,7 +308,14 @@ class SimpleDeviceDatabase {
       lastSeen: new Date().toISOString(),
     };
 
-    this.devices.set(identifier, updatedDevice);
+    // Update both IMEI and androidId entries
+    this.devices.set(device.imei, updatedDevice);
+    if (device.androidId) {
+      this.devices.set(device.androidId, updatedDevice);
+    }
+    
+    logger.info(`Device locked: IMEI ${device.imei}, AndroidId ${device.androidId}`);
+    
     return updatedDevice;
   }
 
@@ -273,31 +333,50 @@ class SimpleDeviceDatabase {
       lastSeen: new Date().toISOString(),
     };
 
-    this.devices.set(identifier, updatedDevice);
+    // Update both IMEI and androidId entries
+    this.devices.set(device.imei, updatedDevice);
+    if (device.androidId) {
+      this.devices.set(device.androidId, updatedDevice);
+    }
+    
+    logger.info(`Device unlocked: IMEI ${device.imei}, AndroidId ${device.androidId}`);
+    
     return updatedDevice;
+  }
+
+  async getAllDevices() {
+    const devices = Array.from(this.devices.values());
+    const uniqueDevices = devices.filter((device, index, self) => 
+      index === self.findIndex(d => d.id === device.id)
+    );
+    return uniqueDevices;
   }
 }
 
 // Singleton instances
-const fcmService = new OptimizedFCMService();
-const deviceDatabase = new SimpleDeviceDatabase();
+const fcmService = new FCMService();
+const deviceDatabase = new DeviceDatabase();
 
 // FCM Database Service
 class FCMDatabaseService {
   static async updateFCMToken(identifier, fcmToken) {
     try {
-      // Check if device exists in our local database
-      const device = await deviceDatabase.getDevice(identifier);
+      // Use shared device database
+      const sharedDb = await import('./shared-device-database.js');
+      const database = sharedDb.getSharedDeviceDatabase();
+      
+      // Check if device exists
+      const device = await database.getDevice(identifier);
       
       if (!device) {
         return {
           success: false,
-          error: 'Device not found. Please register the device first using /api/custom-devices/register',
+          error: 'Device not found in database',
         };
       }
 
       // Update the device with FCM token
-      const updatedDevice = await deviceDatabase.updateDeviceFCMToken(identifier, fcmToken);
+      const updatedDevice = await database.updateDeviceFCMToken(identifier, fcmToken);
       
       if (!updatedDevice) {
         return {
@@ -322,13 +401,17 @@ class FCMDatabaseService {
 
   static async sendLockCommand(identifier) {
     try {
-      // Get device from local database
-      const device = await deviceDatabase.getDevice(identifier);
+      // Use shared device database
+      const sharedDb = await import('./shared-device-database.js');
+      const database = sharedDb.getSharedDeviceDatabase();
+      
+      // Get device from shared database
+      const device = await database.getDevice(identifier);
       
       if (!device) {
         return {
           success: false,
-          error: 'Device not found. Please register the device first using /api/custom-devices/register',
+          error: 'Device not found in database',
         };
       }
 
@@ -348,8 +431,8 @@ class FCMDatabaseService {
       });
 
       if (fcmResult.success) {
-        // Update device status to locked
-        const updatedDevice = await deviceDatabase.lockDevice(identifier);
+        // Update device status to locked in shared database
+        const updatedDevice = await database.lockDevice(identifier);
         
         return {
           success: true,
@@ -376,13 +459,17 @@ class FCMDatabaseService {
 
   static async sendUnlockCommand(identifier) {
     try {
-      // Get device from local database
-      const device = await deviceDatabase.getDevice(identifier);
+      // Use shared device database
+      const sharedDb = await import('./shared-device-database.js');
+      const database = sharedDb.getSharedDeviceDatabase();
+      
+      // Get device from shared database
+      const device = await database.getDevice(identifier);
       
       if (!device) {
         return {
           success: false,
-          error: 'Device not found. Please register the device first using /api/custom-devices/register',
+          error: 'Device not found in database',
         };
       }
 
@@ -402,8 +489,8 @@ class FCMDatabaseService {
       });
 
       if (fcmResult.success) {
-        // Update device status to unlocked
-        const updatedDevice = await deviceDatabase.unlockDevice(identifier);
+        // Update device status to unlocked in shared database
+        const updatedDevice = await database.unlockDevice(identifier);
         
         return {
           success: true,
@@ -430,13 +517,17 @@ class FCMDatabaseService {
 
   static async sendCustomCommand(identifier, command, title, body, data = {}) {
     try {
-      // Get device from local database
-      const device = await deviceDatabase.getDevice(identifier);
+      // Use shared device database
+      const sharedDb = await import('./shared-device-database.js');
+      const database = sharedDb.getSharedDeviceDatabase();
+      
+      // Get device from shared database
+      const device = await database.getDevice(identifier);
       
       if (!device) {
         return {
           success: false,
-          error: 'Device not found. Please register the device first using /api/custom-devices/register',
+          error: 'Device not found in database',
         };
       }
 
@@ -726,3 +817,6 @@ async function handleFCMCustomCommand(requestBody, headers) {
     };
   }
 }
+
+
+
