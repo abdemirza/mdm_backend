@@ -481,3 +481,6 @@ Set the following environment variable in Netlify:
 - Device must be online to receive FCM messages
 - FCM tokens can change, so they should be updated regularly
 - The API automatically updates device status in the database when commands are sent
+
+
+
