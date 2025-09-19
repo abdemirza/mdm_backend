@@ -1,14 +1,94 @@
-// Minimal FCM Service - No Firebase authentication, just basic functionality
+// Simple logger for Netlify Functions
 const logger = {
   info: (message, meta = {}) => console.log(`[INFO] ${message}`, meta),
   error: (message, meta = {}) => console.error(`[ERROR] ${message}`, meta),
   warn: (message, meta = {}) => console.warn(`[WARN] ${message}`, meta),
 };
 
-// Minimal FCM Service - Simulates FCM without actual Firebase calls
-class MinimalFCMService {
+// Optimized FCM Service using individual environment variables instead of large JSON
+class OptimizedFCMService {
   constructor() {
-    this.projectId = process.env.FIREBASE_PROJECT_ID || 'ub-mapp-sandbox';
+    // Use individual environment variables instead of large JSON
+    this.projectId = process.env.FIREBASE_PROJECT_ID;
+    this.clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+    this.privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    this.privateKeyId = process.env.FIREBASE_PRIVATE_KEY_ID;
+    this.clientId = process.env.FIREBASE_CLIENT_ID;
+    this.accessToken = null;
+    this.tokenExpiry = null;
+  }
+
+  async getAccessToken() {
+    try {
+      // Check if we have a valid cached token
+      if (this.accessToken && this.tokenExpiry && Date.now() < this.tokenExpiry) {
+        return this.accessToken;
+      }
+
+      if (!this.clientEmail || !this.privateKey || !this.projectId) {
+        throw new Error('Firebase environment variables not set. Please set FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY, and FIREBASE_PROJECT_ID');
+      }
+
+      // Create JWT for authentication
+      const jwt = await this.createJWT();
+      
+      // Exchange JWT for access token
+      const tokenResponse = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams({
+          grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+          assertion: jwt
+        })
+      });
+
+      const tokenData = await tokenResponse.json();
+
+      if (!tokenResponse.ok) {
+        throw new Error(`Failed to get access token: ${tokenData.error || 'Unknown error'}`);
+      }
+
+      // Cache the token
+      this.accessToken = tokenData.access_token;
+      this.tokenExpiry = Date.now() + (tokenData.expires_in * 1000) - 60000; // 1 minute buffer
+
+      return this.accessToken;
+
+    } catch (error) {
+      logger.error('Error getting access token:', error);
+      throw error;
+    }
+  }
+
+  async createJWT() {
+    const header = {
+      alg: 'RS256',
+      typ: 'JWT'
+    };
+
+    const now = Math.floor(Date.now() / 1000);
+    const payload = {
+      iss: this.clientEmail,
+      scope: 'https://www.googleapis.com/auth/firebase.messaging',
+      aud: 'https://oauth2.googleapis.com/token',
+      iat: now,
+      exp: now + 3600 // 1 hour
+    };
+
+    // Create JWT header and payload
+    const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64url');
+    const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+    const unsignedToken = `${encodedHeader}.${encodedPayload}`;
+
+    // Sign with private key
+    const crypto = require('crypto');
+    const sign = crypto.createSign('RSA-SHA256');
+    sign.update(unsignedToken);
+    const signature = sign.sign(this.privateKey, 'base64url');
+
+    return `${unsignedToken}.${signature}`;
   }
 
   async sendNotificationToDevice(fcmToken, title, body, data = {}) {
@@ -17,32 +97,68 @@ class MinimalFCMService {
         throw new Error('FCM token is required');
       }
 
-      // Simulate FCM call (for testing purposes)
-      logger.info('Simulating FCM notification', { 
-        fcmToken: fcmToken.substring(0, 20) + '...',
-        title,
-        body,
-        data
-      });
-
-      // Return success response (simulated)
-      return {
-        success: true,
-        messageId: `simulated_${Date.now()}`,
-        successCount: 1,
-        failureCount: 0,
-        data: {
-          name: `projects/${this.projectId}/messages/simulated_${Date.now()}`,
-          message: {
-            token: fcmToken,
-            notification: { title, body },
-            data: data
+      const accessToken = await this.getAccessToken();
+      
+      const message = {
+        message: {
+          token: fcmToken,
+          notification: {
+            title: title,
+            body: body
+          },
+          data: {
+            ...data,
+            timestamp: new Date().toISOString()
+          },
+          android: {
+            priority: 'high',
+            ttl: '3600s'
+          },
+          apns: {
+            headers: {
+              'apns-priority': '10'
+            },
+            payload: {
+              aps: {
+                sound: 'default',
+                badge: 1
+              }
+            }
           }
         }
       };
 
+      const response = await fetch(`https://fcm.googleapis.com/v1/projects/${this.projectId}/messages:send`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(message)
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(`FCM request failed: ${result.error?.message || 'Unknown error'}`);
+      }
+
+      logger.info('FCM notification sent successfully', { 
+        fcmToken: fcmToken.substring(0, 20) + '...',
+        messageId: result.name,
+        success: true 
+      });
+
+      return {
+        success: true,
+        messageId: result.name,
+        successCount: 1,
+        failureCount: 0,
+        data: result
+      };
+
     } catch (error) {
-      logger.error('Error in simulated FCM notification:', error);
+      logger.error('Error sending FCM notification:', error);
       return {
         success: false,
         error: error.message
@@ -163,7 +279,7 @@ class SimpleDeviceDatabase {
 }
 
 // Singleton instances
-const fcmService = new MinimalFCMService();
+const fcmService = new OptimizedFCMService();
 const deviceDatabase = new SimpleDeviceDatabase();
 
 // FCM Database Service
@@ -193,7 +309,7 @@ class FCMDatabaseService {
       return {
         success: true,
         data: updatedDevice,
-        message: 'FCM token updated successfully (simulated)',
+        message: 'FCM token updated successfully',
       };
     } catch (error) {
       logger.error('Error in updateFCMToken:', error);
@@ -223,7 +339,7 @@ class FCMDatabaseService {
         };
       }
 
-      // Send simulated FCM lock command
+      // Send FCM lock command
       const fcmResult = await fcmService.sendLockCommand(device.fcmToken, {
         imei: device.imei,
         androidId: device.androidId,
@@ -241,7 +357,7 @@ class FCMDatabaseService {
             device: updatedDevice,
             fcmResult: fcmResult
           },
-          message: 'Lock command sent successfully via FCM (simulated)',
+          message: 'Lock command sent successfully via FCM',
         };
       } else {
         return {
@@ -277,7 +393,7 @@ class FCMDatabaseService {
         };
       }
 
-      // Send simulated FCM unlock command
+      // Send FCM unlock command
       const fcmResult = await fcmService.sendUnlockCommand(device.fcmToken, {
         imei: device.imei,
         androidId: device.androidId,
@@ -295,7 +411,7 @@ class FCMDatabaseService {
             device: updatedDevice,
             fcmResult: fcmResult
           },
-          message: 'Unlock command sent successfully via FCM (simulated)',
+          message: 'Unlock command sent successfully via FCM',
         };
       } else {
         return {
@@ -331,7 +447,7 @@ class FCMDatabaseService {
         };
       }
 
-      // Send simulated FCM custom command
+      // Send FCM custom command
       const fcmResult = await fcmService.sendCustomCommand(
         device.fcmToken, 
         command, 
@@ -354,7 +470,7 @@ class FCMDatabaseService {
           device: device,
           fcmResult: fcmResult
         },
-        message: fcmResult.success ? 'Custom command sent successfully via FCM (simulated)' : `Failed to send FCM command: ${fcmResult.error}`,
+        message: fcmResult.success ? 'Custom command sent successfully via FCM' : `Failed to send FCM command: ${fcmResult.error}`,
       };
     } catch (error) {
       logger.error('Error in sendCustomCommand:', error);
