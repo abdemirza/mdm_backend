@@ -359,20 +359,62 @@ const deviceDatabase = new DeviceDatabase();
 
 // FCM Database Service
 class FCMDatabaseService {
+  static async getDeviceFromCustomDevicesAPI(identifier) {
+    try {
+      // Make internal API call to custom-devices endpoint
+      const response = await fetch('https://poetic-llama-889a15.netlify.app/api/custom-devices', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Custom devices API call failed: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.data) {
+        // Find device by IMEI or androidId
+        const device = result.data.find(d => 
+          d.imei === identifier || d.androidId === identifier
+        );
+        return device || null;
+      }
+      
+      return null;
+    } catch (error) {
+      logger.error('Error fetching device from custom devices API:', error);
+      return null;
+    }
+  }
+
   static async updateFCMToken(identifier, fcmToken) {
     try {
-      const device = await deviceDatabase.updateDeviceFCMToken(identifier, fcmToken);
+      // First, get the device from custom devices API
+      const device = await this.getDeviceFromCustomDevicesAPI(identifier);
       
       if (!device) {
         return {
           success: false,
-          error: 'Device not found',
+          error: 'Device not found in custom devices database',
+        };
+      }
+
+      // Update the device with FCM token in our local database
+      const updatedDevice = await deviceDatabase.updateDeviceFCMToken(identifier, fcmToken);
+      
+      if (!updatedDevice) {
+        return {
+          success: false,
+          error: 'Failed to update FCM token in local database',
         };
       }
 
       return {
         success: true,
-        data: device,
+        data: updatedDevice,
         message: 'FCM token updated successfully',
       };
     } catch (error) {
@@ -386,24 +428,28 @@ class FCMDatabaseService {
 
   static async sendLockCommand(identifier) {
     try {
-      const device = await deviceDatabase.getDevice(identifier);
+      // First, get the device from custom devices API
+      const device = await this.getDeviceFromCustomDevicesAPI(identifier);
       
       if (!device) {
         return {
           success: false,
-          error: 'Device not found',
+          error: 'Device not found in custom devices database',
         };
       }
 
-      if (!device.fcmToken) {
+      // Check if device has FCM token in our local database
+      const localDevice = await deviceDatabase.getDevice(identifier);
+      
+      if (!localDevice || !localDevice.fcmToken) {
         return {
           success: false,
-          error: 'Device does not have FCM token registered',
+          error: 'Device does not have FCM token registered. Please register FCM token first.',
         };
       }
 
       // Send FCM lock command
-      const fcmResult = await fcmService.sendLockCommand(device.fcmToken, {
+      const fcmResult = await fcmService.sendLockCommand(localDevice.fcmToken, {
         imei: device.imei,
         androidId: device.androidId,
         deviceName: device.deviceName,
@@ -411,7 +457,7 @@ class FCMDatabaseService {
       });
 
       if (fcmResult.success) {
-        // Update device status to locked
+        // Update device status to locked in local database
         const updatedDevice = await deviceDatabase.lockDevice(identifier);
         
         return {
@@ -439,24 +485,28 @@ class FCMDatabaseService {
 
   static async sendUnlockCommand(identifier) {
     try {
-      const device = await deviceDatabase.getDevice(identifier);
+      // First, get the device from custom devices API
+      const device = await this.getDeviceFromCustomDevicesAPI(identifier);
       
       if (!device) {
         return {
           success: false,
-          error: 'Device not found',
+          error: 'Device not found in custom devices database',
         };
       }
 
-      if (!device.fcmToken) {
+      // Check if device has FCM token in our local database
+      const localDevice = await deviceDatabase.getDevice(identifier);
+      
+      if (!localDevice || !localDevice.fcmToken) {
         return {
           success: false,
-          error: 'Device does not have FCM token registered',
+          error: 'Device does not have FCM token registered. Please register FCM token first.',
         };
       }
 
       // Send FCM unlock command
-      const fcmResult = await fcmService.sendUnlockCommand(device.fcmToken, {
+      const fcmResult = await fcmService.sendUnlockCommand(localDevice.fcmToken, {
         imei: device.imei,
         androidId: device.androidId,
         deviceName: device.deviceName,
@@ -464,7 +514,7 @@ class FCMDatabaseService {
       });
 
       if (fcmResult.success) {
-        // Update device status to unlocked
+        // Update device status to unlocked in local database
         const updatedDevice = await deviceDatabase.unlockDevice(identifier);
         
         return {
@@ -492,25 +542,29 @@ class FCMDatabaseService {
 
   static async sendCustomCommand(identifier, command, title, body, data = {}) {
     try {
-      const device = await deviceDatabase.getDevice(identifier);
+      // First, get the device from custom devices API
+      const device = await this.getDeviceFromCustomDevicesAPI(identifier);
       
       if (!device) {
         return {
           success: false,
-          error: 'Device not found',
+          error: 'Device not found in custom devices database',
         };
       }
 
-      if (!device.fcmToken) {
+      // Check if device has FCM token in our local database
+      const localDevice = await deviceDatabase.getDevice(identifier);
+      
+      if (!localDevice || !localDevice.fcmToken) {
         return {
           success: false,
-          error: 'Device does not have FCM token registered',
+          error: 'Device does not have FCM token registered. Please register FCM token first.',
         };
       }
 
       // Send FCM custom command
       const fcmResult = await fcmService.sendCustomCommand(
-        device.fcmToken, 
+        localDevice.fcmToken, 
         command, 
         title, 
         body, 
