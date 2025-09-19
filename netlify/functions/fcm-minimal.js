@@ -99,77 +99,72 @@ class MinimalFCMService {
   }
 }
 
-// FCM Database Service that integrates with Custom Devices API
-class FCMDatabaseService {
-  static async getDeviceFromCustomDevices(identifier) {
-    try {
-      // Import the custom devices service
-      const { DeviceDatabaseService } = await import('./custom-devices.js');
-      const customDeviceService = DeviceDatabaseService.getInstance();
-      
-      // Get all devices from custom devices service
-      const devices = await customDeviceService.getAllDevices();
-      
-      if (devices.success && devices.data) {
-        // Find device by IMEI or androidId
-        const device = devices.data.find(d => 
-          d.imei === identifier || d.androidId === identifier
-        );
-        return device || null;
-      }
-      
-      return null;
-    } catch (error) {
-      logger.error('Error fetching device from custom devices service:', error);
-      return null;
-    }
+// Simple in-memory device database
+class SimpleDeviceDatabase {
+  constructor() {
+    this.devices = new Map();
   }
 
-  static async updateDeviceFCMToken(identifier, fcmToken) {
-    try {
-      // First, get the device from custom devices service
-      const device = await this.getDeviceFromCustomDevices(identifier);
-      
-      if (!device) {
-        return {
-          success: false,
-          error: 'Device not found in custom devices database. Please register the device first using /api/custom-devices/register',
-        };
-      }
-
-      // Update the device with FCM token using custom devices service
-      const { DeviceDatabaseService } = await import('./custom-devices.js');
-      const customDeviceService = DeviceDatabaseService.getInstance();
-      
-      // Update device status with FCM token
-      const updateResult = await customDeviceService.updateDeviceStatus(identifier, {
-        fcmToken: fcmToken,
-        lastSeen: new Date().toISOString()
-      });
-
-      if (updateResult.success) {
-        return {
-          success: true,
-          data: updateResult.data,
-          message: 'FCM token updated successfully',
-        };
-      } else {
-        return {
-          success: false,
-          error: 'Failed to update FCM token in custom devices database',
-        };
-      }
-    } catch (error) {
-      logger.error('Error in updateFCMToken:', error);
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error occurred',
-      };
-    }
+  async getDevice(identifier) {
+    return this.devices.get(identifier) || null;
   }
+
+  async updateDeviceFCMToken(identifier, fcmToken) {
+    const device = this.devices.get(identifier);
+    if (!device) {
+      return null;
+    }
+
+    const updatedDevice = {
+      ...device,
+      fcmToken: fcmToken,
+      lastSeen: new Date().toISOString(),
+    };
+
+    this.devices.set(identifier, updatedDevice);
+    return updatedDevice;
+  }
+
+  async lockDevice(identifier) {
+    const device = this.devices.get(identifier);
+    if (!device) {
+      return null;
+    }
+
+    const updatedDevice = {
+      ...device,
+      isLocked: true,
+      lastLockTime: new Date().toISOString(),
+      status: 'locked',
+      lastSeen: new Date().toISOString(),
+    };
+
+    this.devices.set(identifier, updatedDevice);
+    return updatedDevice;
+  }
+
+  async unlockDevice(identifier) {
+    const device = this.devices.get(identifier);
+    if (!device) {
+      return null;
+    }
+
+    const updatedDevice = {
+      ...device,
+      isLocked: false,
+      lastUnlockTime: new Date().toISOString(),
+      status: 'active',
+      lastSeen: new Date().toISOString(),
+    };
+
+    this.devices.set(identifier, updatedDevice);
+    return updatedDevice;
+  }
+}
 
 // Singleton instances
 const fcmService = new MinimalFCMService();
+const deviceDatabase = new SimpleDeviceDatabase();
 
 // FCM Database Service
 class FCMDatabaseService {
@@ -211,13 +206,13 @@ class FCMDatabaseService {
 
   static async sendLockCommand(identifier) {
     try {
-      // Get device from custom devices service
-      const device = await this.getDeviceFromCustomDevices(identifier);
+      // Get device from local database
+      const device = await deviceDatabase.getDevice(identifier);
       
       if (!device) {
         return {
           success: false,
-          error: 'Device not found in custom devices database. Please register the device first using /api/custom-devices/register',
+          error: 'Device not found. Please register the device first using /api/custom-devices/register',
         };
       }
 
@@ -237,16 +232,13 @@ class FCMDatabaseService {
       });
 
       if (fcmResult.success) {
-        // Update device status to locked using custom devices service
-        const { DeviceDatabaseService } = await import('./custom-devices.js');
-        const customDeviceService = DeviceDatabaseService.getInstance();
-        
-        const lockResult = await customDeviceService.lockDevice(identifier);
+        // Update device status to locked
+        const updatedDevice = await deviceDatabase.lockDevice(identifier);
         
         return {
           success: true,
           data: {
-            device: lockResult.data,
+            device: updatedDevice,
             fcmResult: fcmResult
           },
           message: 'Lock command sent successfully via FCM (simulated)',
@@ -268,13 +260,13 @@ class FCMDatabaseService {
 
   static async sendUnlockCommand(identifier) {
     try {
-      // Get device from custom devices service
-      const device = await this.getDeviceFromCustomDevices(identifier);
+      // Get device from local database
+      const device = await deviceDatabase.getDevice(identifier);
       
       if (!device) {
         return {
           success: false,
-          error: 'Device not found in custom devices database. Please register the device first using /api/custom-devices/register',
+          error: 'Device not found. Please register the device first using /api/custom-devices/register',
         };
       }
 
@@ -294,16 +286,13 @@ class FCMDatabaseService {
       });
 
       if (fcmResult.success) {
-        // Update device status to unlocked using custom devices service
-        const { DeviceDatabaseService } = await import('./custom-devices.js');
-        const customDeviceService = DeviceDatabaseService.getInstance();
-        
-        const unlockResult = await customDeviceService.unlockDevice(identifier);
+        // Update device status to unlocked
+        const updatedDevice = await deviceDatabase.unlockDevice(identifier);
         
         return {
           success: true,
           data: {
-            device: unlockResult.data,
+            device: updatedDevice,
             fcmResult: fcmResult
           },
           message: 'Unlock command sent successfully via FCM (simulated)',
@@ -325,13 +314,13 @@ class FCMDatabaseService {
 
   static async sendCustomCommand(identifier, command, title, body, data = {}) {
     try {
-      // Get device from custom devices service
-      const device = await this.getDeviceFromCustomDevices(identifier);
+      // Get device from local database
+      const device = await deviceDatabase.getDevice(identifier);
       
       if (!device) {
         return {
           success: false,
-          error: 'Device not found in custom devices database. Please register the device first using /api/custom-devices/register',
+          error: 'Device not found. Please register the device first using /api/custom-devices/register',
         };
       }
 
