@@ -1,4 +1,4 @@
-// Simple logger for Netlify Functions
+// Minimal FCM Service - No Firebase authentication, just basic functionality
 const logger = {
   info: (message, meta = {}) => console.log(`[INFO] ${message}`, meta),
   error: (message, meta = {}) => console.error(`[ERROR] ${message}`, meta),
@@ -125,7 +125,7 @@ class FCMDatabaseService {
     }
   }
 
-  static async updateFCMToken(identifier, fcmToken) {
+  static async updateDeviceFCMToken(identifier, fcmToken) {
     try {
       // First, get the device from custom devices service
       const device = await this.getDeviceFromCustomDevices(identifier);
@@ -168,6 +168,47 @@ class FCMDatabaseService {
     }
   }
 
+// Singleton instances
+const fcmService = new MinimalFCMService();
+
+// FCM Database Service
+class FCMDatabaseService {
+  static async updateFCMToken(identifier, fcmToken) {
+    try {
+      // Check if device exists in our local database
+      const device = await deviceDatabase.getDevice(identifier);
+      
+      if (!device) {
+        return {
+          success: false,
+          error: 'Device not found. Please register the device first using /api/custom-devices/register',
+        };
+      }
+
+      // Update the device with FCM token
+      const updatedDevice = await deviceDatabase.updateDeviceFCMToken(identifier, fcmToken);
+      
+      if (!updatedDevice) {
+        return {
+          success: false,
+          error: 'Failed to update FCM token',
+        };
+      }
+
+      return {
+        success: true,
+        data: updatedDevice,
+        message: 'FCM token updated successfully (simulated)',
+      };
+    } catch (error) {
+      logger.error('Error in updateFCMToken:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
+      };
+    }
+  }
+
   static async sendLockCommand(identifier) {
     try {
       // Get device from custom devices service
@@ -188,7 +229,6 @@ class FCMDatabaseService {
       }
 
       // Send simulated FCM lock command
-      const fcmService = new MinimalFCMService();
       const fcmResult = await fcmService.sendLockCommand(device.fcmToken, {
         imei: device.imei,
         androidId: device.androidId,
@@ -246,7 +286,6 @@ class FCMDatabaseService {
       }
 
       // Send simulated FCM unlock command
-      const fcmService = new MinimalFCMService();
       const fcmResult = await fcmService.sendUnlockCommand(device.fcmToken, {
         imei: device.imei,
         androidId: device.androidId,
@@ -304,7 +343,6 @@ class FCMDatabaseService {
       }
 
       // Send simulated FCM custom command
-      const fcmService = new MinimalFCMService();
       const fcmResult = await fcmService.sendCustomCommand(
         device.fcmToken, 
         command, 
@@ -357,7 +395,7 @@ export const handler = async (event, context) => {
   }
 
   try {
-    const { httpMethod, path, body } = event;
+    const { httpMethod, path, body, queryStringParameters } = event;
     const pathSegments = path.split('/').filter(Boolean);
     
     // Remove 'api' and 'fcm' from path segments
@@ -369,122 +407,16 @@ export const handler = async (event, context) => {
         
         if (fcmPath === 'update-token') {
           // POST /api/fcm/update-token - Update FCM token for device
-          const { imei, androidId, fcmToken } = requestBody;
-          
-          if (!fcmToken) {
-            return {
-              statusCode: 400,
-              headers,
-              body: JSON.stringify({
-                success: false,
-                error: 'FCM token is required',
-              }),
-            };
-          }
-
-          if (!imei && !androidId) {
-            return {
-              statusCode: 400,
-              headers,
-              body: JSON.stringify({
-                success: false,
-                error: 'Either IMEI or androidId is required',
-              }),
-            };
-          }
-
-          const identifier = imei || androidId;
-          const result = await FCMDatabaseService.updateFCMToken(identifier, fcmToken);
-          
-          return {
-            statusCode: result.success ? 200 : 404,
-            headers,
-            body: JSON.stringify(result),
-          };
-
+          return await handleUpdateFCMToken(requestBody, headers);
         } else if (fcmPath === 'lock') {
           // POST /api/fcm/lock - Send lock command via FCM
-          const { imei, androidId } = requestBody;
-          
-          if (!imei && !androidId) {
-            return {
-              statusCode: 400,
-              headers,
-              body: JSON.stringify({
-                success: false,
-                error: 'Either IMEI or androidId is required',
-              }),
-            };
-          }
-
-          const identifier = imei || androidId;
-          const result = await FCMDatabaseService.sendLockCommand(identifier);
-          
-          return {
-            statusCode: result.success ? 200 : 404,
-            headers,
-            body: JSON.stringify(result),
-          };
-
+          return await handleFCMLock(requestBody, headers);
         } else if (fcmPath === 'unlock') {
           // POST /api/fcm/unlock - Send unlock command via FCM
-          const { imei, androidId } = requestBody;
-          
-          if (!imei && !androidId) {
-            return {
-              statusCode: 400,
-              headers,
-              body: JSON.stringify({
-                success: false,
-                error: 'Either IMEI or androidId is required',
-              }),
-            };
-          }
-
-          const identifier = imei || androidId;
-          const result = await FCMDatabaseService.sendUnlockCommand(identifier);
-          
-          return {
-            statusCode: result.success ? 200 : 404,
-            headers,
-            body: JSON.stringify(result),
-          };
-
+          return await handleFCMUnlock(requestBody, headers);
         } else if (fcmPath === 'custom-command') {
           // POST /api/fcm/custom-command - Send custom command via FCM
-          const { imei, androidId, command, title, body, data } = requestBody;
-          
-          if (!imei && !androidId) {
-            return {
-              statusCode: 400,
-              headers,
-              body: JSON.stringify({
-                success: false,
-                error: 'Either IMEI or androidId is required',
-              }),
-            };
-          }
-
-          if (!command || !title || !body) {
-            return {
-              statusCode: 400,
-              headers,
-              body: JSON.stringify({
-                success: false,
-                error: 'command, title, and body are required',
-              }),
-            };
-          }
-
-          const identifier = imei || androidId;
-          const result = await FCMDatabaseService.sendCustomCommand(identifier, command, title, body, data || {});
-          
-          return {
-            statusCode: result.success ? 200 : 404,
-            headers,
-            body: JSON.stringify(result),
-          };
-
+          return await handleFCMCustomCommand(requestBody, headers);
         } else {
           return {
             statusCode: 404,
@@ -519,3 +451,188 @@ export const handler = async (event, context) => {
     };
   }
 };
+
+async function handleUpdateFCMToken(requestBody, headers) {
+  try {
+    const { imei, androidId, fcmToken } = requestBody;
+    
+    if (!fcmToken) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: 'FCM token is required',
+        }),
+      };
+    }
+
+    if (!imei && !androidId) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: 'Either IMEI or androidId is required',
+        }),
+      };
+    }
+
+    const identifier = imei || androidId;
+    const result = await FCMDatabaseService.updateFCMToken(identifier, fcmToken);
+    
+    return {
+      statusCode: result.success ? 200 : 404,
+      headers,
+      body: JSON.stringify(result),
+    };
+  } catch (error) {
+    logger.error('Error in handleUpdateFCMToken:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        success: false,
+        error: 'Internal server error',
+        details: error.message,
+      }),
+    };
+  }
+}
+
+async function handleFCMLock(requestBody, headers) {
+  try {
+    const { imei, androidId } = requestBody;
+    
+    if (!imei && !androidId) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: 'Either IMEI or androidId is required',
+        }),
+      };
+    }
+
+    const identifier = imei || androidId;
+    const result = await FCMDatabaseService.sendLockCommand(identifier);
+    
+    return {
+      statusCode: result.success ? 200 : 404,
+      headers,
+      body: JSON.stringify(result),
+    };
+  } catch (error) {
+    logger.error('Error in handleFCMLock:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        success: false,
+        error: 'Internal server error',
+        details: error.message,
+      }),
+    };
+  }
+}
+
+async function handleFCMUnlock(requestBody, headers) {
+  try {
+    const { imei, androidId } = requestBody;
+    
+    if (!imei && !androidId) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: 'Either IMEI or androidId is required',
+        }),
+      };
+    }
+
+    const identifier = imei || androidId;
+    const result = await FCMDatabaseService.sendUnlockCommand(identifier);
+    
+    return {
+      statusCode: result.success ? 200 : 404,
+      headers,
+      body: JSON.stringify(result),
+    };
+  } catch (error) {
+    logger.error('Error in handleFCMUnlock:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        success: false,
+        error: 'Internal server error',
+        details: error.message,
+      }),
+    };
+  }
+}
+
+async function handleFCMCustomCommand(requestBody, headers) {
+  try {
+    const { imei, androidId, command, title, body, data } = requestBody;
+    
+    if (!imei && !androidId) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: 'Either IMEI or androidId is required',
+        }),
+      };
+    }
+
+    if (!command || !title || !body) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: 'command, title, and body are required',
+        }),
+      };
+    }
+
+    const identifier = imei || androidId;
+    const result = await FCMDatabaseService.sendCustomCommand(identifier, command, title, body, data || {});
+    
+    return {
+      statusCode: result.success ? 200 : 404,
+      headers,
+      body: JSON.stringify(result),
+    };
+  } catch (error) {
+    logger.error('Error in handleFCMCustomCommand:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        success: false,
+        error: 'Internal server error',
+        details: error.message,
+      }),
+    };
+  }
+}
+
+// Main handler function closing
+  } catch (error) {
+    logger.error('Error in FCM function:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        success: false,
+        error: 'Internal server error',
+        details: error.message,
+      }),
+    };
+  }
+}
