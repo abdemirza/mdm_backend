@@ -104,6 +104,18 @@ class RealFCMService {
 
       const accessToken = await this.getAccessToken();
       
+      // Filter data to only include valid FCM data fields
+      const validFCMData = {};
+      if (data) {
+        // Only include string values and avoid nested objects
+        Object.keys(data).forEach(key => {
+          const value = data[key];
+          if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+            validFCMData[key] = String(value);
+          }
+        });
+      }
+      
       const message = {
         message: {
           token: fcmToken,
@@ -112,7 +124,7 @@ class RealFCMService {
             body: body
           },
           data: {
-            ...data,
+            ...validFCMData,
             timestamp: new Date().toISOString()
           },
           android: {
@@ -781,13 +793,11 @@ export const handler = async (event, context) => {
               'Test Push Notification',
               'This is a test notification to verify FCM connectivity',
               {
-                test: true,
-                timestamp: new Date().toISOString(),
-                deviceInfo: {
-                  imei: device.imei,
-                  androidId: device.androidId,
-                  deviceName: device.deviceName
-                }
+                test: 'true',
+                command: 'TEST_NOTIFICATION',
+                device_imei: device.imei,
+                device_android_id: device.androidId,
+                device_name: device.deviceName
               }
             );
 
@@ -845,9 +855,9 @@ export const handler = async (event, context) => {
               title || 'Direct Test Notification',
               body || 'This is a direct test notification to verify FCM connectivity',
               {
-                test: true,
-                direct: true,
-                timestamp: new Date().toISOString()
+                test: 'true',
+                direct: 'true',
+                command: 'DIRECT_TEST'
               }
             );
 
