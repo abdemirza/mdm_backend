@@ -33,16 +33,31 @@ class RealFCMService {
                         '.' + Buffer.from(JSON.stringify(payload)).toString('base64url');
 
     const crypto = await import('crypto');
+    
+    // Format the private key properly for Node.js crypto
+    const privateKey = this.privateKey.replace(/\\n/g, '\n');
+    
     const sign = crypto.createSign('RSA-SHA256');
     sign.update(unsignedToken);
     
-    const signature = sign.sign(this.privateKey, 'base64url');
+    const signature = sign.sign(privateKey, 'base64url');
     return `${unsignedToken}.${signature}`;
   }
 
   async getAccessToken() {
     try {
+      logger.info('Creating JWT for Firebase authentication', {
+        projectId: this.projectId,
+        clientEmail: this.clientEmail,
+        privateKeyLength: this.privateKey?.length || 0
+      });
+
       const jwt = await this.createJWT();
+      
+      logger.info('JWT created successfully', {
+        jwtLength: jwt.length,
+        jwtPreview: jwt.substring(0, 50) + '...'
+      });
       
       const response = await fetch('https://oauth2.googleapis.com/token', {
         method: 'POST',
@@ -56,6 +71,17 @@ class RealFCMService {
       });
 
       const result = await response.json();
+      
+      logger.info('OAuth2 token response', {
+        status: response.status,
+        hasAccessToken: !!result.access_token,
+        error: result.error
+      });
+
+      if (!response.ok) {
+        throw new Error(`OAuth2 token request failed: ${result.error || 'Unknown error'}`);
+      }
+
       return result.access_token;
     } catch (error) {
       logger.error('Error getting access token:', error);
