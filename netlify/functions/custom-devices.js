@@ -5,32 +5,18 @@ const logger = {
   warn: (message, meta = {}) => console.warn(`[WARN] ${message}`, meta),
 };
 
-// In-memory database for demo purposes
+// Import MongoDB service
+const mongoDBService = require('./mongodb-service');
+
+// MongoDB-based database service
 class DeviceDatabase {
   constructor() {
-    this.devices = new Map();
-    this.nextId = 1;
+    this.mongoDB = mongoDBService;
   }
 
   async registerDevice(deviceData) {
     try {
-      const device = {
-        id: this.nextId++,
-        ...deviceData,
-        isLocked: false,
-        registeredAt: new Date().toISOString(),
-        status: 'active',
-        lastSeen: new Date().toISOString(),
-      };
-
-      // Store device by both IMEI and androidId for flexible lookup
-      this.devices.set(device.imei, device);
-      if (device.androidId) {
-        this.devices.set(device.androidId, device);
-      }
-      
-      logger.info(`Device registered: IMEI ${device.imei}, AndroidId ${device.androidId}`, { deviceId: device.id });
-      
+      const device = await this.mongoDB.registerDevice(deviceData);
       return device;
     } catch (error) {
       logger.error('Error registering device:', error);
@@ -39,95 +25,63 @@ class DeviceDatabase {
   }
 
   async getDevice(identifier) {
-    // Try to get device by identifier (could be IMEI or androidId)
-    return this.devices.get(identifier) || null;
+    try {
+      const device = await this.mongoDB.getDevice(identifier);
+      return device;
+    } catch (error) {
+      logger.error('Error getting device:', error);
+      throw error;
+    }
   }
 
   async updateDeviceStatus(identifier, updates) {
-    const device = this.devices.get(identifier);
-    if (!device) {
-      return null;
+    try {
+      const device = await this.mongoDB.updateDeviceStatus(identifier, updates);
+      return device;
+    } catch (error) {
+      logger.error('Error updating device status:', error);
+      throw error;
     }
-
-    const updatedDevice = {
-      ...device,
-      ...updates,
-      lastSeen: new Date().toISOString(),
-    };
-
-    // Update both IMEI and androidId entries
-    this.devices.set(device.imei, updatedDevice);
-    if (device.androidId) {
-      this.devices.set(device.androidId, updatedDevice);
-    }
-    
-    logger.info(`Device updated: IMEI ${device.imei}, AndroidId ${device.androidId}`, { updates });
-    
-    return updatedDevice;
   }
 
   async lockDevice(identifier) {
-    const device = this.devices.get(identifier);
-    if (!device) {
-      return null;
+    try {
+      const device = await this.mongoDB.lockDevice(identifier);
+      return device;
+    } catch (error) {
+      logger.error('Error locking device:', error);
+      throw error;
     }
-
-    const updatedDevice = {
-      ...device,
-      isLocked: true,
-      lastLockTime: new Date().toISOString(),
-      status: 'locked',
-      lastSeen: new Date().toISOString(),
-    };
-
-    // Update both IMEI and androidId entries
-    this.devices.set(device.imei, updatedDevice);
-    if (device.androidId) {
-      this.devices.set(device.androidId, updatedDevice);
-    }
-    
-    logger.info(`Device locked: IMEI ${device.imei}, AndroidId ${device.androidId}`);
-    
-    return updatedDevice;
   }
 
   async unlockDevice(identifier) {
-    const device = this.devices.get(identifier);
-    if (!device) {
-      return null;
+    try {
+      const device = await this.mongoDB.unlockDevice(identifier);
+      return device;
+    } catch (error) {
+      logger.error('Error unlocking device:', error);
+      throw error;
     }
-
-    const updatedDevice = {
-      ...device,
-      isLocked: false,
-      lastUnlockTime: new Date().toISOString(),
-      status: 'active',
-      lastSeen: new Date().toISOString(),
-    };
-
-    // Update both IMEI and androidId entries
-    this.devices.set(device.imei, updatedDevice);
-    if (device.androidId) {
-      this.devices.set(device.androidId, updatedDevice);
-    }
-    
-    logger.info(`Device unlocked: IMEI ${device.imei}, AndroidId ${device.androidId}`);
-    
-    return updatedDevice;
   }
 
   async getAllDevices() {
-    // Get unique devices by filtering out duplicates (since we store by both IMEI and androidId)
-    const devices = Array.from(this.devices.values());
-    const uniqueDevices = devices.filter((device, index, self) => 
-      index === self.findIndex(d => d.id === device.id)
-    );
-    return uniqueDevices;
+    try {
+      const devices = await this.mongoDB.getAllDevices();
+      return devices;
+    } catch (error) {
+      logger.error('Error getting all devices:', error);
+      throw error;
+    }
   }
 
   async getDevicesByStatus(status) {
-    const devices = await this.getAllDevices();
-    return devices.filter(device => device.status === status);
+    try {
+      const devices = await this.mongoDB.getDevicesByStatus(status);
+      return devices;
+    } catch (error) {
+      logger.error('Error getting devices by status:', error);
+      throw error;
+    }
   }
 }
 
