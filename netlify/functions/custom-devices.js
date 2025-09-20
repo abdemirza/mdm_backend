@@ -605,7 +605,7 @@ async function handleDeviceStatusUpdate(requestBody, headers) {
 
 async function handleDeviceUpdate(requestBody, headers) {
   try {
-    const { imei, androidId, fcmToken, lastSeen } = requestBody;
+    const { imei, androidId, fcmToken, lastSeen, isLocked, status, lastLockTime, lastUnlockTime } = requestBody;
     
     if (!imei && !androidId) {
       return {
@@ -629,12 +629,32 @@ async function handleDeviceUpdate(requestBody, headers) {
       updates.lastSeen = lastSeen;
     }
 
+    if (typeof isLocked !== 'undefined') {
+      updates.isLocked = isLocked;
+    }
+
+    if (status) {
+      updates.status = status;
+    }
+
+    if (lastLockTime) {
+      updates.lastLockTime = lastLockTime;
+    }
+
+    if (lastUnlockTime) {
+      updates.lastUnlockTime = lastUnlockTime;
+    }
+
     const result = await DeviceDatabaseService.updateDeviceStatus(identifier, updates);
     
     return {
-      statusCode: result.success ? 200 : 404,
+      statusCode: result ? 200 : 404,
       headers,
-      body: JSON.stringify(result),
+      body: JSON.stringify({
+        success: !!result,
+        data: result,
+        message: result ? 'Device status updated successfully' : 'Device not found'
+      }),
     };
   } catch (error) {
     logger.error('Error in handleDeviceUpdate:', error);
