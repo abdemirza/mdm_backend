@@ -241,17 +241,42 @@ class FCMDatabaseService {
         };
       }
 
-      // For now, just return success since we found the device
-      // In a real implementation, you would update the device with FCM token
-      return {
-        success: true,
-        data: {
-          ...device,
+      // Update the device with FCM token by making a PUT request to custom devices API
+      const updateResponse = await fetch('https://poetic-llama-889a15.netlify.app/api/custom-devices', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          androidId: device.androidId,
+          imei: device.imei,
           fcmToken: fcmToken,
           lastSeen: new Date().toISOString()
-        },
-        message: 'FCM token updated successfully',
-      };
+        })
+      });
+
+      if (!updateResponse.ok) {
+        throw new Error(`Failed to update device FCM token: ${updateResponse.status}`);
+      }
+
+      const updateResult = await updateResponse.json();
+      
+      if (updateResult.success) {
+        return {
+          success: true,
+          data: {
+            ...device,
+            fcmToken: fcmToken,
+            lastSeen: new Date().toISOString()
+          },
+          message: 'FCM token updated successfully',
+        };
+      } else {
+        return {
+          success: false,
+          error: `Failed to update FCM token: ${updateResult.error}`,
+        };
+      }
     } catch (error) {
       logger.error('Error in updateFCMToken:', error);
       return {
