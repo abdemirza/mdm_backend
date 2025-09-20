@@ -254,10 +254,26 @@ class FCMDatabaseService {
       
       if (result.success && result.data) {
         // Find device by IMEI or androidId
-        const device = result.data.find(d => 
+        const matchingDevices = result.data.filter(d => 
           d.imei === identifier || d.androidId === identifier
         );
-        return device || null;
+        
+        if (matchingDevices.length === 0) {
+          return null;
+        }
+        
+        // If multiple devices match, prefer the one with a valid FCM token
+        if (matchingDevices.length > 1) {
+          const deviceWithToken = matchingDevices.find(d => 
+            d.fcmToken && !d.fcmToken.startsWith('test_')
+          );
+          if (deviceWithToken) {
+            return deviceWithToken;
+          }
+        }
+        
+        // Return the first matching device
+        return matchingDevices[0];
       }
       
       return null;
