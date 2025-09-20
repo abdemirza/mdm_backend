@@ -352,6 +352,23 @@ export const handler = async (event, context) => {
           };
         }
 
+      case 'PUT':
+        const putRequestBody = body ? JSON.parse(body) : {};
+        
+        if (devicePath === '') {
+          // PUT /api/custom-devices - Update device (including FCM token)
+          return await handleDeviceUpdate(putRequestBody, headers);
+        } else {
+          return {
+            statusCode: 404,
+            headers,
+            body: JSON.stringify({
+              success: false,
+              error: 'PUT endpoint not found',
+            }),
+          };
+        }
+
       case 'GET':
         if (devicePath === '') {
           // GET /api/custom-devices - List all devices
@@ -574,6 +591,53 @@ async function handleDeviceStatusUpdate(requestBody, headers) {
     };
   } catch (error) {
     logger.error('Error in handleDeviceStatusUpdate:', error);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        success: false,
+        error: 'Internal server error',
+        details: error.message,
+      }),
+    };
+  }
+}
+
+async function handleDeviceUpdate(requestBody, headers) {
+  try {
+    const { imei, androidId, fcmToken, lastSeen } = requestBody;
+    
+    if (!imei && !androidId) {
+      return {
+        statusCode: 400,
+        headers,
+        body: JSON.stringify({
+          success: false,
+          error: 'Either IMEI or androidId is required',
+        }),
+      };
+    }
+
+    const identifier = imei || androidId;
+    const updates = {};
+    
+    if (fcmToken) {
+      updates.fcmToken = fcmToken;
+    }
+    
+    if (lastSeen) {
+      updates.lastSeen = lastSeen;
+    }
+
+    const result = await DeviceDatabaseService.updateDeviceStatus(identifier, updates);
+    
+    return {
+      statusCode: result.success ? 200 : 404,
+      headers,
+      body: JSON.stringify(result),
+    };
+  } catch (error) {
+    logger.error('Error in handleDeviceUpdate:', error);
     return {
       statusCode: 500,
       headers,
