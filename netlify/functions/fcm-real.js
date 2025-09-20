@@ -565,6 +565,148 @@ export const handler = async (event, context) => {
             body: JSON.stringify(result),
           };
 
+        } else if (fcmPath === 'test-notification') {
+          // POST /api/fcm-real/test-notification - Send test push notification
+          const { imei, androidId, fcmToken } = requestBody;
+          
+          if (!imei && !androidId) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'Either IMEI or androidId is required',
+              }),
+            };
+          }
+
+          const identifier = imei || androidId;
+          
+          try {
+            // Get device info
+            const device = await FCMDatabaseService.getDeviceFromCustomDevices(identifier);
+            
+            if (!device) {
+              return {
+                statusCode: 404,
+                headers,
+                body: JSON.stringify({
+                  success: false,
+                  error: 'Device not found in custom devices database',
+                }),
+              };
+            }
+
+            // Use provided FCM token or fallback to test token
+            const tokenToUse = fcmToken || device.fcmToken || 'test_fcm_token_' + device.androidId;
+            
+            // Send test notification
+            const fcmService = new RealFCMService();
+            const fcmResult = await fcmService.sendNotificationToDevice(
+              tokenToUse,
+              'Test Push Notification',
+              'This is a test notification to verify FCM connectivity',
+              {
+                test: true,
+                timestamp: new Date().toISOString(),
+                deviceInfo: {
+                  imei: device.imei,
+                  androidId: device.androidId,
+                  deviceName: device.deviceName
+                }
+              }
+            );
+
+            return {
+              statusCode: 200,
+              headers,
+              body: JSON.stringify({
+                success: true,
+                data: {
+                  device: device,
+                  fcmResult: fcmResult,
+                  testInfo: {
+                    fcmToken: tokenToUse.substring(0, 20) + '...',
+                    isRealToken: !tokenToUse.startsWith('test_'),
+                    message: 'Test notification sent successfully'
+                  }
+                },
+                message: 'Test notification sent successfully',
+              }),
+            };
+
+          } catch (error) {
+            logger.error('Error in test notification:', error);
+            return {
+              statusCode: 500,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'Failed to send test notification',
+                details: error.message,
+              }),
+            };
+          }
+
+        } else if (fcmPath === 'test-direct') {
+          // POST /api/fcm-real/test-direct - Send test notification directly with FCM token
+          const { fcmToken, title, body } = requestBody;
+          
+          if (!fcmToken) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'FCM token is required',
+              }),
+            };
+          }
+
+          try {
+            // Send test notification directly
+            const fcmService = new RealFCMService();
+            const fcmResult = await fcmService.sendNotificationToDevice(
+              fcmToken,
+              title || 'Direct Test Notification',
+              body || 'This is a direct test notification to verify FCM connectivity',
+              {
+                test: true,
+                direct: true,
+                timestamp: new Date().toISOString()
+              }
+            );
+
+            return {
+              statusCode: 200,
+              headers,
+              body: JSON.stringify({
+                success: true,
+                data: {
+                  fcmResult: fcmResult,
+                  testInfo: {
+                    fcmToken: fcmToken.substring(0, 20) + '...',
+                    isRealToken: !fcmToken.startsWith('test_'),
+                    message: 'Direct test notification sent successfully'
+                  }
+                },
+                message: 'Direct test notification sent successfully',
+              }),
+            };
+
+          } catch (error) {
+            logger.error('Error in direct test notification:', error);
+            return {
+              statusCode: 500,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'Failed to send direct test notification',
+                details: error.message,
+              }),
+            };
+          }
+
         } else {
           return {
             statusCode: 404,
