@@ -138,6 +138,41 @@ async function testWithRegisteredDevice() {
   }
 }
 
+async function checkDeviceToken(androidId) {
+  console.log('\n🔍 Checking Device FCM Token Registration...\n');
+  
+  try {
+    const response = await makeRequest('GET', `/api/fcm-real/check-token?androidId=${androidId}`);
+    
+    console.log('📱 Token Check Response:');
+    console.log(`Status: ${response.status}`);
+    console.log(JSON.stringify(response.data, null, 2));
+    
+    if (response.data.success) {
+      const tokenInfo = response.data.data.tokenInfo;
+      console.log('\n📊 Token Registration Status:');
+      console.log(`Has FCM Token: ${tokenInfo.hasToken ? '✅ YES' : '❌ NO'}`);
+      console.log(`Is Real Token: ${tokenInfo.isRealToken ? '✅ YES' : '❌ NO'}`);
+      console.log(`Token Preview: ${tokenInfo.token}`);
+      console.log(`Token Length: ${tokenInfo.tokenLength}`);
+      console.log(`Last Seen: ${tokenInfo.lastSeen}`);
+      
+      if (tokenInfo.hasToken) {
+        console.log('\n🎉 FCM token is properly registered!');
+        console.log('You can now send push notifications to this device.');
+      } else {
+        console.log('\n⚠️  FCM token is not registered or is a test token.');
+        console.log('Please register a real FCM token from your Android app.');
+      }
+    } else {
+      console.log('\n❌ Failed to check token registration!');
+      console.log('Error:', response.data.error);
+    }
+  } catch (error) {
+    console.error('❌ Error checking token registration:', error.message);
+  }
+}
+
 async function main() {
   console.log('🚀 FCM Token Testing Script\n');
   console.log('This script helps you test FCM notifications with your backend.\n');
@@ -145,10 +180,13 @@ async function main() {
   // Test 1: Check Firebase configuration
   await testDebugConfig();
   
-  // Test 2: Test with registered device
+  // Test 2: Check device token registration
+  await checkDeviceToken('6a45f97fe76a09da');
+  
+  // Test 3: Test with registered device
   await testWithRegisteredDevice();
   
-  // Test 3: Test with direct FCM token (if provided)
+  // Test 4: Test with direct FCM token (if provided)
   const fcmToken = process.argv[2];
   if (fcmToken) {
     await testDirectNotification(fcmToken);

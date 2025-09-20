@@ -488,6 +488,74 @@ export const handler = async (event, context) => {
               }),
             };
           }
+        } else if (fcmPath === 'check-token') {
+          // GET /api/fcm-real/check-token?androidId=xxx - Check if device FCM token is registered
+          const { androidId, imei } = event.queryStringParameters || {};
+          
+          if (!androidId && !imei) {
+            return {
+              statusCode: 400,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'Either androidId or imei query parameter is required',
+              }),
+            };
+          }
+
+          try {
+            const identifier = androidId || imei;
+            const device = await FCMDatabaseService.getDeviceFromCustomDevices(identifier);
+            
+            if (!device) {
+              return {
+                statusCode: 404,
+                headers,
+                body: JSON.stringify({
+                  success: false,
+                  error: 'Device not found in custom devices database',
+                }),
+              };
+            }
+
+            const hasFCMToken = !!(device.fcmToken && !device.fcmToken.startsWith('test_'));
+            const tokenInfo = {
+              hasToken: hasFCMToken,
+              token: device.fcmToken ? device.fcmToken.substring(0, 20) + '...' : 'NOT_SET',
+              isRealToken: hasFCMToken,
+              tokenLength: device.fcmToken ? device.fcmToken.length : 0,
+              lastSeen: device.lastSeen,
+              deviceInfo: {
+                imei: device.imei,
+                androidId: device.androidId,
+                deviceName: device.deviceName,
+                model: device.model
+              }
+            };
+
+            return {
+              statusCode: 200,
+              headers,
+              body: JSON.stringify({
+                success: true,
+                data: {
+                  device: device,
+                  tokenInfo: tokenInfo,
+                  message: hasFCMToken ? 'FCM token is registered' : 'FCM token not registered or is test token'
+                }
+              })
+            };
+          } catch (error) {
+            return {
+              statusCode: 500,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'Failed to check FCM token',
+                details: error.message,
+              }),
+            };
+          }
         } else {
           return {
             statusCode: 404,
