@@ -65,23 +65,16 @@ class RealFCMService {
 
   async sendNotificationToDevice(fcmToken, title, body, data = {}) {
     try {
-      if (!fcmToken || fcmToken.startsWith('test_')) {
-        logger.warn('Using test FCM token, sending simulated notification');
-        return {
-          success: true,
-          messageId: 'simulated_' + Date.now(),
-          successCount: 1,
-          failureCount: 0,
-          data: {
-            name: `projects/ub-mapp-sandbox/messages/simulated_${Date.now()}`,
-            message: {
-              token: fcmToken,
-              notification: { title, body },
-              data: { ...data, timestamp: new Date().toISOString() }
-            }
-          }
-        };
+      if (!fcmToken) {
+        throw new Error('FCM token is required');
       }
+
+      // Always try to send real notification, even with test tokens
+      logger.info('Sending real FCM notification', { 
+        fcmToken: fcmToken.substring(0, 20) + '...',
+        title,
+        body 
+      });
 
       const accessToken = await this.getAccessToken();
       
@@ -103,6 +96,12 @@ class RealFCMService {
         }
       };
 
+      logger.info('Sending FCM request to Firebase', {
+        projectId: this.projectId,
+        fcmToken: fcmToken.substring(0, 20) + '...',
+        message: message
+      });
+
       const response = await fetch(`https://fcm.googleapis.com/v1/projects/${this.projectId}/messages:send`, {
         method: 'POST',
         headers: {
@@ -114,7 +113,18 @@ class RealFCMService {
 
       const result = await response.json();
 
+      logger.info('FCM response received', {
+        status: response.status,
+        ok: response.ok,
+        result: result
+      });
+
       if (!response.ok) {
+        logger.error('FCM request failed', {
+          status: response.status,
+          error: result.error,
+          message: result.error?.message
+        });
         throw new Error(`FCM request failed: ${result.error?.message || 'Unknown error'}`);
       }
 
@@ -702,6 +712,40 @@ export const handler = async (event, context) => {
               body: JSON.stringify({
                 success: false,
                 error: 'Failed to send direct test notification',
+                details: error.message,
+              }),
+            };
+          }
+
+        } else if (fcmPath === 'debug-config') {
+          // GET /api/fcm-real/debug-config - Debug Firebase configuration
+          try {
+            const config = {
+              projectId: process.env.FIREBASE_PROJECT_ID,
+              clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+              privateKey: process.env.FIREBASE_PRIVATE_KEY ? 'SET' : 'NOT_SET',
+              privateKeyLength: process.env.FIREBASE_PRIVATE_KEY?.length || 0,
+              hasAllConfig: !!(process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY)
+            };
+
+            return {
+              statusCode: 200,
+              headers,
+              body: JSON.stringify({
+                success: true,
+                data: {
+                  config: config,
+                  message: 'Firebase configuration debug'
+                }
+              })
+            };
+          } catch (error) {
+            return {
+              statusCode: 500,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'Failed to get debug config',
                 details: error.message,
               }),
             };
