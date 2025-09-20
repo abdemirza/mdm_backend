@@ -454,6 +454,51 @@ export const handler = async (event, context) => {
     const fcmPath = pathSegments.slice(2).join('/');
 
     switch (httpMethod) {
+      case 'GET':
+        if (fcmPath === 'debug-config') {
+          // GET /api/fcm-real/debug-config - Debug Firebase configuration
+          try {
+            const config = {
+              projectId: process.env.FIREBASE_PROJECT_ID,
+              clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+              privateKey: process.env.FIREBASE_PRIVATE_KEY ? 'SET' : 'NOT_SET',
+              privateKeyLength: process.env.FIREBASE_PRIVATE_KEY?.length || 0,
+              hasAllConfig: !!(process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY)
+            };
+
+            return {
+              statusCode: 200,
+              headers,
+              body: JSON.stringify({
+                success: true,
+                data: {
+                  config: config,
+                  message: 'Firebase configuration debug'
+                }
+              })
+            };
+          } catch (error) {
+            return {
+              statusCode: 500,
+              headers,
+              body: JSON.stringify({
+                success: false,
+                error: 'Failed to get debug config',
+                details: error.message,
+              }),
+            };
+          }
+        } else {
+          return {
+            statusCode: 404,
+            headers,
+            body: JSON.stringify({
+              success: false,
+              error: 'GET endpoint not found',
+            }),
+          };
+        }
+
       case 'POST':
         const requestBody = body ? JSON.parse(body) : {};
         
@@ -717,39 +762,6 @@ export const handler = async (event, context) => {
             };
           }
 
-        } else if (fcmPath === 'debug-config') {
-          // GET /api/fcm-real/debug-config - Debug Firebase configuration
-          try {
-            const config = {
-              projectId: process.env.FIREBASE_PROJECT_ID,
-              clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-              privateKey: process.env.FIREBASE_PRIVATE_KEY ? 'SET' : 'NOT_SET',
-              privateKeyLength: process.env.FIREBASE_PRIVATE_KEY?.length || 0,
-              hasAllConfig: !!(process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY)
-            };
-
-            return {
-              statusCode: 200,
-              headers,
-              body: JSON.stringify({
-                success: true,
-                data: {
-                  config: config,
-                  message: 'Firebase configuration debug'
-                }
-              })
-            };
-          } catch (error) {
-            return {
-              statusCode: 500,
-              headers,
-              body: JSON.stringify({
-                success: false,
-                error: 'Failed to get debug config',
-                details: error.message,
-              }),
-            };
-          }
 
         } else {
           return {
