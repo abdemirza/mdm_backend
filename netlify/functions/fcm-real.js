@@ -349,20 +349,42 @@ class FCMDatabaseService {
       });
 
       if (fcmResult.success) {
-        // For now, just return success since we found the device and sent the command
-        // In a real implementation, you would update the device status to locked
+        // Update device status in the database to locked
+        const updateResponse = await fetch('https://poetic-llama-889a15.netlify.app/api/custom-devices', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            androidId: device.androidId,
+            imei: device.imei,
+            isLocked: true,
+            status: 'locked',
+            lastLockTime: new Date().toISOString(),
+            lastSeen: new Date().toISOString()
+          })
+        });
+
+        if (!updateResponse.ok) {
+          logger.warn('FCM lock command sent but failed to update device status in database');
+        }
+
+        const updatedDevice = {
+          ...device,
+          isLocked: true,
+          lastLockTime: new Date().toISOString(),
+          status: 'locked',
+          lastSeen: new Date().toISOString()
+        };
+
         return {
           success: true,
           data: {
-            device: {
-              ...device,
-              isLocked: true,
-              lastLockTime: new Date().toISOString(),
-              status: 'locked'
-            },
-            fcmResult: fcmResult
+            device: updatedDevice,
+            fcmResult: fcmResult,
+            databaseUpdated: updateResponse.ok
           },
-          message: 'Lock command sent successfully via FCM',
+          message: 'Lock command sent successfully via FCM and device status updated in database',
         };
       } else {
         return {
@@ -404,20 +426,42 @@ class FCMDatabaseService {
       });
 
       if (fcmResult.success) {
-        // For now, just return success since we found the device and sent the command
-        // In a real implementation, you would update the device status to unlocked
+        // Update device status in the database to unlocked
+        const updateResponse = await fetch('https://poetic-llama-889a15.netlify.app/api/custom-devices', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            androidId: device.androidId,
+            imei: device.imei,
+            isLocked: false,
+            status: 'active',
+            lastUnlockTime: new Date().toISOString(),
+            lastSeen: new Date().toISOString()
+          })
+        });
+
+        if (!updateResponse.ok) {
+          logger.warn('FCM unlock command sent but failed to update device status in database');
+        }
+
+        const updatedDevice = {
+          ...device,
+          isLocked: false,
+          lastUnlockTime: new Date().toISOString(),
+          status: 'active',
+          lastSeen: new Date().toISOString()
+        };
+
         return {
           success: true,
           data: {
-            device: {
-              ...device,
-              isLocked: false,
-              lastUnlockTime: new Date().toISOString(),
-              status: 'active'
-            },
-            fcmResult: fcmResult
+            device: updatedDevice,
+            fcmResult: fcmResult,
+            databaseUpdated: updateResponse.ok
           },
-          message: 'Unlock command sent successfully via FCM',
+          message: 'Unlock command sent successfully via FCM and device status updated in database',
         };
       } else {
         return {
