@@ -89,47 +89,50 @@ class RealFCMService {
     }
   }
 
-  async sendNotificationToDevice(fcmToken, title, body, data = {}) {
+  async sendDataMessageToDevice(fcmToken, data = {}) {
     try {
       if (!fcmToken) {
         throw new Error('FCM token is required');
       }
 
-      // Always try to send real notification, even with test tokens
-      logger.info('Sending real FCM notification', { 
+      // Send silent data message (no notification)
+      logger.info('Sending FCM data message', { 
         fcmToken: fcmToken.substring(0, 20) + '...',
-        title,
-        body 
+        data: data
       });
 
       const accessToken = await this.getAccessToken();
       
-      // Filter data to only include valid FCM data fields
-      const validFCMData = {};
-      if (data) {
-        // Only include string values and avoid nested objects
-        Object.keys(data).forEach(key => {
-          const value = data[key];
-          if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-            validFCMData[key] = String(value);
-          }
-        });
-      }
+      // Ensure all data values are strings (FCM requirement)
+      const stringData = {};
+      Object.keys(data).forEach(key => {
+        stringData[key] = String(data[key]);
+      });
       
       const message = {
         message: {
           token: fcmToken,
-          notification: {
-            title: title,
-            body: body
-          },
           data: {
-            ...validFCMData,
+            ...stringData,
             timestamp: new Date().toISOString()
           },
           android: {
             priority: 'high',
-            ttl: '3600s'
+            ttl: '3600s',
+            data: {
+              ...stringData,
+              timestamp: new Date().toISOString()
+            }
+          },
+          apns: {
+            headers: {
+              'apns-priority': '10'
+            },
+            payload: {
+              aps: {
+                'content-available': 1
+              }
+            }
           }
         }
       };
@@ -166,7 +169,7 @@ class RealFCMService {
         throw new Error(`FCM request failed: ${result.error?.message || 'Unknown error'}`);
       }
 
-      logger.info('FCM notification sent successfully', { 
+      logger.info('FCM data message sent successfully', { 
         fcmToken: fcmToken.substring(0, 20) + '...',
         messageId: result.name,
         success: true 
@@ -181,7 +184,7 @@ class RealFCMService {
       };
 
     } catch (error) {
-      logger.error('Error sending FCM notification:', error);
+      logger.error('Error sending FCM data message:', error);
       return {
         success: false,
         error: error.message
@@ -193,44 +196,39 @@ class RealFCMService {
     const lockData = {
       command: 'LOCK_DEVICE',
       action: 'lock',
-      deviceInfo: deviceInfo
+      device_imei: deviceInfo.imei || '',
+      device_android_id: deviceInfo.androidId || '',
+      device_name: deviceInfo.deviceName || '',
+      device_model: deviceInfo.model || '',
+      timestamp: new Date().toISOString()
     };
 
-    return await this.sendNotificationToDevice(
-      fcmToken,
-      'Device Lock Command',
-      'Your device has been locked by the administrator',
-      lockData
-    );
+    return await this.sendDataMessageToDevice(fcmToken, lockData);
   }
 
   async sendUnlockCommand(fcmToken, deviceInfo = {}) {
     const unlockData = {
       command: 'UNLOCK_DEVICE',
       action: 'unlock',
-      deviceInfo: deviceInfo
+      device_imei: deviceInfo.imei || '',
+      device_android_id: deviceInfo.androidId || '',
+      device_name: deviceInfo.deviceName || '',
+      device_model: deviceInfo.model || '',
+      timestamp: new Date().toISOString()
     };
 
-    return await this.sendNotificationToDevice(
-      fcmToken,
-      'Device Unlock Command',
-      'Your device has been unlocked by the administrator',
-      unlockData
-    );
+    return await this.sendDataMessageToDevice(fcmToken, unlockData);
   }
 
-  async sendCustomCommand(fcmToken, command, title, body, data = {}) {
+  async sendCustomCommand(fcmToken, command, data = {}) {
     const commandData = {
-      command: command,
-      ...data
+      command: command.toUpperCase(),
+      action: command.toLowerCase(),
+      ...data,
+      timestamp: new Date().toISOString()
     };
 
-    return await this.sendNotificationToDevice(
-      fcmToken,
-      title,
-      body,
-      commandData
-    );
+    return await this.sendDataMessageToDevice(fcmToken, commandData);
   }
 }
 
@@ -400,7 +398,7 @@ class FCMDatabaseService {
             fcmResult: fcmResult,
             databaseUpdated: updateResponse.ok
           },
-          message: 'Lock command sent successfully via FCM and device status updated in database',
+          message: 'Lock command sent successfully via FCM data message and device status updated in database',
         };
       } else {
         return {
@@ -477,7 +475,7 @@ class FCMDatabaseService {
             fcmResult: fcmResult,
             databaseUpdated: updateResponse.ok
           },
-          message: 'Unlock command sent successfully via FCM and device status updated in database',
+          message: 'Unlock command sent successfully via FCM data message and device status updated in database',
         };
       } else {
         return {
@@ -494,7 +492,7 @@ class FCMDatabaseService {
     }
   }
 
-  static async sendCustomCommand(identifier, command, title, body, data = {}) {
+  static async sendCustomCommand(identifier, command, data = {}) {
     try {
       // First, get the device from custom devices service
       const device = await this.getDeviceFromCustomDevices(identifier);
@@ -511,21 +509,13 @@ class FCMDatabaseService {
 
       // Send real FCM custom command
       const fcmService = new RealFCMService();
-      const fcmResult = await fcmService.sendCustomCommand(
-        fcmToken, 
-        command, 
-        title, 
-        body, 
-        {
-          ...data,
-          deviceInfo: {
-            imei: device.imei,
-            androidId: device.androidId,
-            deviceName: device.deviceName,
-            model: device.model
-          }
-        }
-      );
+      const fcmResult = await fcmService.sendCustomCommand(fcmToken, command, {
+        device_imei: device.imei,
+        device_android_id: device.androidId,
+        device_name: device.deviceName,
+        device_model: device.model,
+        ...data
+      });
 
       if (fcmResult.success) {
         return {
@@ -534,7 +524,7 @@ class FCMDatabaseService {
             device: device,
             fcmResult: fcmResult
           },
-          message: 'Custom command sent successfully via FCM',
+          message: 'Custom command sent successfully via FCM data message',
         };
       } else {
         return {
@@ -777,8 +767,8 @@ export const handler = async (event, context) => {
           };
 
         } else if (fcmPath === 'custom-command') {
-          // POST /api/fcm-real/custom-command - Send custom command via FCM
-          const { imei, androidId, command, title, body, data } = requestBody;
+          // POST /api/fcm-real/custom-command - Send custom command via FCM data message
+          const { imei, androidId, command, data } = requestBody;
           
           if (!imei && !androidId) {
             return {
@@ -791,19 +781,19 @@ export const handler = async (event, context) => {
             };
           }
 
-          if (!command || !title || !body) {
+          if (!command) {
             return {
               statusCode: 400,
               headers,
               body: JSON.stringify({
                 success: false,
-                error: 'command, title, and body are required',
+                error: 'Command is required',
               }),
             };
           }
 
           const identifier = imei || androidId;
-          const result = await FCMDatabaseService.sendCustomCommand(identifier, command, title, body, data || {});
+          const result = await FCMDatabaseService.sendCustomCommand(identifier, command, data || {});
           
           return {
             statusCode: result.success ? 200 : 404,
